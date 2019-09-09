@@ -27,13 +27,13 @@ random.seed(1000)
 N_EPOCHS = 50
 
 def gen_class_0():
-    mean = [0, 0]
+    mean = [1, 0]
     cov = [[1, 0], [0, 10]]
     return np.random.multivariate_normal(mean, cov )
 
 def gen_class_1():
-    mean = [5, 5]
-    cov = [[1, 0], [0, 3]]
+    mean = [5, 0]
+    cov = [[1, 0], [0, 1]]
     return np.random.multivariate_normal(mean, cov )
 
 
@@ -60,8 +60,20 @@ def add_noise_to_class(delta, label, y):
     return y_tilde
 
 def gen_corrupted_labels(delta_0, delta_1, y):
-    y_tilde = add_noise_to_class(delta_0, 0, y)
-    y_tilde = add_noise_to_class(delta_1, 1, y)
+    
+    # dictionaries of indices mapped to whether or not the value 
+    # should be flipped
+    flip_zero = {i: True if np.random.rand() < delta_0 else False for i, x in enumerate(y) if x == 0}
+    flip_one = {i: True if np.random.rand() < delta_1 else False for i, x in enumerate(y) if x == 1}
+    
+    y_tilde = np.copy(y)
+    for index in flip_zero:
+        if flip_zero[index]:
+            y_tilde[index] = 1
+            
+    for index in flip_one:
+        if flip_one[index]:
+            y_tilde[index] = 0
     return y_tilde
 
 def build_model():
