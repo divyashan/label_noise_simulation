@@ -51,6 +51,21 @@ def gen_data(p, n_examples=100):
             Y[i] = 1
     return X, Y
 
+def gen_data_dist(p, dist_0, dist_1, n_examples=100):
+    X = np.zeros((n_examples, 2))
+    Y = np.zeros((n_examples))
+
+    for i in range(n_examples):
+        rand_num = np.random.rand()
+        if rand_num < p:
+            X[i] = dist_0.sample()
+            Y[i] = 0
+        else:
+            X[i] = dist_1.sample()
+            Y[i] = 1
+    return X, Y
+
+
 def add_noise_to_class(delta, label, y):
 # Assumption: labels are binary, 0 and 1
     y_tilde = np.copy(y)

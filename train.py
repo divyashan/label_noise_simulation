@@ -8,6 +8,9 @@ import seaborn as sns
 from simulation import gen_data, gen_corrupted_labels, add_noise_to_class
 sns.set_style('whitegrid')
 
+
+DISTRIBUTIONS = {"gaussian": distributions.MultivariateGaussian}
+
 def main():
     """ Loads arguments and starts training."""
     parser = argparse.ArgumentParser(description="Simulated Noise Experiments")
@@ -15,7 +18,6 @@ def main():
 
     args = parser.parse_args()
     config_file = args.config
-
     # Load config
     assert os.path.exists(args.config), "Config file {} does not exist".format(
         args.config)
@@ -26,8 +28,32 @@ def main():
     n_examples = config["train"]["n_examples"]
     class_split = config["train"]["class_split"]
     n_runs = config["train"]["n_runs"] 
+    
+    dist_0_name = config["train"]["distribution_class_0"]["name"]
+    dist_1_name = config["train"]["distribution_class_1"]["name"]
+    
+    if config["train"]["distribution_class_0"]["parameters"]:
+        dist_0 = DISTRIBUTIONS[dist_0_name](**config["train"]["distribution_class_0"]["parameters"])
+    else:
+        dist_0 = DISTRIBUTIONS[dist_0_name]()
 
-def get_data(n_examples, n_runs, delta_0, delta_1):
+    
+    if config["train"]["distribution_class_1"]["parameters"]:
+        dist_1 = DISTRIBUTIONS[dist_1_name](**config["train"]["distribution_class_1"]["parameters"])
+    else:
+        dist_1 = DISTRIBUTIONS[dist_1_name]()
+
+    if config["experiment"]["class_noise_difference"]:
+        delta_stars = config["experiment"]["class_noise_difference"]["delta_stars"]
+        auc_vs_class_noise_difference_experiment(dist_0, dist_1, n_examples, n_runs, delta_stars)
+    if config["experiment"]["fixed_total_noise"]:
+        total_noise = config["fixed_total_noise"]["noise"]  
+        fixed_total_noise_experiment(dist_0, dist_1, total_noise)
+    if config["experiment"]["fix_delta0_vary_delta1"]:
+        fix_delta0_vary_delta1(dist_0, dist_1, delta0_range, delta1_range):
+
+
+def get_data(dist_0, dist_1, n_examples, n_runs, delta_0, delta_1):
     """
     Method that returns three datasets
         1. Training set with corrupted and n_runs sets of 
@@ -45,7 +71,7 @@ def get_data(n_examples, n_runs, delta_0, delta_1):
     N_VAL = int(.25*n_examples)
     N_TEST = int(.25*n_examples)
 
-    X, y = gen_data(p, n_examples=n_examples)
+    X, y = gen_data_dist(dist_0, dist_1, p, n_examples=n_examples)
 
     X_train, y_train = X[:N_TRAIN], y[:N_TRAIN]
     X_val, y_val = X[N_TRAIN:N_TRAIN+N_VAL], y[N_TRAIN:N_TRAIN+N_VAL]
@@ -54,7 +80,7 @@ def get_data(n_examples, n_runs, delta_0, delta_1):
 
     return [(X_train, y_train, y_train_tildes), (X_val,  y_val), (X_test, y_test)]
 
-def score_delta(n_examples, n_runs, delta_0, delta_1):
+def score_delta(dist_0, dist_1, n_examples, n_runs, delta_0, delta_1):
     """
     Method that returns the average score of a Logistic
     Regression model on a test set where the training data has
@@ -68,7 +94,7 @@ def score_delta(n_examples, n_runs, delta_0, delta_1):
         delta_0: the probability that we flip labels that are equal to 0
         delta_1: the probability that we flip labels that are equal to 1
     """
-    train, val, test = get_data(n_examples, n_runs, delta_0, delta_1)
+    train, val, test = get_data(dist_0, dist_1, n_examples, n_runs, delta_0, delta_1)
     X_train, y_train, y_train_tildes = train
     X_val,  y_val = val
     X_test, y_test = test
@@ -84,7 +110,7 @@ def score_delta(n_examples, n_runs, delta_0, delta_1):
     avg_score/=n_runs
     return avg_score
 
-def scores_deltas(delta_vals, n_examples, n_runs):
+def scores_deltas(dist_0, dist_1, delta_vals, n_examples, n_runs):
     """
     A wrapper method for the score_delta function.
     Calls the score_delta function for all pairs of
@@ -96,10 +122,10 @@ def scores_deltas(delta_vals, n_examples, n_runs):
     """
     scores = []
     for delta_0, delta_1 in delta_vals:
-            scores.append(score_delta(n_examples, n_runs, delta_0, delta_1))
+            scores.append(score_delta(dist_0, dist_1, n_examples, n_runs, delta_0, delta_1))
     return scores
 
-def auc_vs_class_noise_difference_experiment(n_examples, n_runs, delta_stars):
+def auc_vs_class_noise_difference_experiment(dist_0, dist_1, n_examples, n_runs, delta_stars):
     """
     We observe that AUC deteriorates as the difference between class noise levels increases.
     We fix delta_star as the mean probability of flipping a class 1 or class 0 label.
@@ -108,7 +134,7 @@ def auc_vs_class_noise_difference_experiment(n_examples, n_runs, delta_stars):
     """
     for delta_star in delta_stars:
         deltas = [(delta_star-delta, delta_star+delta) for delta in np.linspace(0, .4, 20)]
-        scores = scores_deltas(deltas, n_examples, n_runs)
+        scores = scores_deltas(dist_0, dist_1, deltas, n_examples, n_runs)
         plt.plot(np.linspace(0, .4, 20), scores, label="{}".format(delta_star))
     plt.xlim(0, .4)
     plt.ylim(0, 1)
@@ -117,14 +143,14 @@ def auc_vs_class_noise_difference_experiment(n_examples, n_runs, delta_stars):
     plt.title("Various Delta* | AUC vs. Class Noise Difference")
     plt.legend()
 
-def fixed_total_noise_experiment(total_noise):
+def fixed_total_noise_experiment(dist_0, dist_1, total_noise):
     """
     We fix the "total amount of noise" which is the sum of the label flipping rate for both classes. 
     For instance, set delta_0 + delta_1 = 0.5. We examine a variety of different (delta_0, delta_1) 
     combinations to see which of them results in the highest test accuracy.
     """
     delta_vals = [(delta_0, total_noise-delta_0) for delta_0 in np.linspace(0, total_noise, 20)]
-    scores = scores_deltas(delta_vals, n_examples, n_runs)
+    scores = scores_deltas(dist_0, dist_1, delta_vals, n_examples, n_runs)
 
     fixed_total_noise_scores = scores
 
@@ -138,7 +164,7 @@ def fixed_total_noise_experiment(total_noise):
     plt.title("Delta_0 + Delta_1 = {} | AUC vs. Delta_0".format(total_noise))
     plt.legend()
 
-def fix_delta0_vary_delta1(delta0_range, delta1_range):
+def fix_delta0_vary_delta1(dist_0, dist_1, delta0_range, delta1_range):
     """
     In this experiment, we fix delta_0 and find the optimal amount of noise to inject in delta_1.
     """
@@ -146,7 +172,7 @@ def fix_delta0_vary_delta1(delta0_range, delta1_range):
     delta_1_coords = np.linspace(delta1_range[0], delta1_range[1], 20)
     delta_vals = [[(delta_0, delta_1) for delta_1 in delta_1_coords] for delta_0 in delta_0_coords]
 
-    scores = [scores_deltas(subset, n_runs) for subset in delta_vals]
+    scores = [scores_deltas(dist_0, dist_1, subset, n_runs) for subset in delta_vals]
 
     for i in range(len(delta_0_coords)):
         plt.plot(delta_1_coords, scores[i], label= 'delta_0={}'.format(delta_0_coords[i]))
