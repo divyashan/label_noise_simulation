@@ -51,7 +51,10 @@ def gen_data(p, n_examples=100):
             Y[i] = 1
     return X, Y
 
-def gen_data_dist(p, dist_0, dist_1, n_examples=100):
+def gen_data_dist(data_params, n_examples=100):
+    p = data_params["class_split"]
+    dist_1 = data_params["dist_1"]
+    dist_0 = data_params["dist_0"]
     X = np.zeros((n_examples, 2))
     Y = np.zeros((n_examples))
 

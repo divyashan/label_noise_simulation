@@ -1,0 +1,22 @@
+train:
+    n_examples: 1000
+    class_split: 0.5
+    n_runs: 10
+    distribution_class_0:
+        name: "uniform"
+        parameters:
+            low: 0
+            high: 10
+    distribution_class_1:
+        name: "uniform"
+        parameters:
+            low: 6
+            high: 12
+experiment:
+    class_noise_difference:
+        delta_stars: [0.1, 0.2, 0.3, 0.4, 0.5]
+    fixed_total_noise:
+        noise: [0.2, 0.4, 0.6, 0.8]
+    fix_delta0_vary_delta1:
+        delta0_range: [0.1, 0.4]
+        delta1_range: [0.1, 0.9] 
