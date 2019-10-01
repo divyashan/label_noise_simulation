@@ -14,7 +14,8 @@ DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/simulated_noise.yaml"
 DISTRIBUTIONS = {"gaussian": distribution.MultivariateGaussian,
                  "exponential": distribution.Exponential,
                  "geometric": distribution.Geometric,
-                 "uniform": distribution.Uniform}
+                 "uniform": distribution.Uniform,
+                 "blob": distribution.Blob}
 
 def main():
     """ Loads arguments and starts training."""
@@ -28,41 +29,51 @@ def main():
         args.config)
 
     with open(config_file) as fp:
-        config = yaml.load(fp)
+        config = yaml.load(fp, yaml.Loader)
 
     n_examples = config["train"]["n_examples"]
     class_split = config["train"]["class_split"]
     n_runs = config["train"]["n_runs"] 
     
-    dist_0_name = config["train"]["distribution_class_0"]["name"]
-    dist_1_name = config["train"]["distribution_class_1"]["name"]
+    if "clustering" in config["train"]["distribution"]:
+        data_params = config["train"]["distribution"] 
+        data_params["dist_0"] = DISTRIBUTIONS["blob"]() 
+        data_params["dist_1"] = DISTRIBUTIONS["blob"]()
+    else: 
+        dist_0_name = config["train"]["distribution"]["class_0"]["name"]
+        dist_1_name = config["train"]["distribution"]["class_1"]["name"]
     
-    if config["train"]["distribution_class_0"]["parameters"]:
-        dist_0 = DISTRIBUTIONS[dist_0_name](**config["train"]["distribution_class_0"]["parameters"])
-    else:
-        dist_0 = DISTRIBUTIONS[dist_0_name]()
+        if config["train"]["distribution"]["class_0"]["parameters"]:
+            dist_0 = DISTRIBUTIONS[dist_0_name](**config["train"]["distribution"]["class_0"]["parameters"])
+        else:
+            dist_0 = DISTRIBUTIONS[dist_0_name]()
 
-    
-    if config["train"]["distribution_class_1"]["parameters"]:
-        dist_1 = DISTRIBUTIONS[dist_1_name](**config["train"]["distribution_class_1"]["parameters"])
-    else:
-        dist_1 = DISTRIBUTIONS[dist_1_name]()
+        if config["train"]["distribution"]["class_1"]["parameters"]:
+            dist_1 = DISTRIBUTIONS[dist_1_name](**config["train"]["distribution"]["class_1"]["parameters"])
+        else:
+            dist_1 = DISTRIBUTIONS[dist_1_name]()
+        data_params = {"dist_0": dist_0, "dist_1": dist_1, "class_split": class_split}
+    generate_all_distribution_plots(data_params, n_examples)   
 
-    data_params = {"dist_0": dist_0, "dist_1": dist_1, "class_split": class_split}
+"""
+    experiments = []
     if config["experiment"]["class_noise_difference"]:
         print("Running class noise difference experiment")
         delta_stars = config["experiment"]["class_noise_difference"]["delta_stars"]
         auc_vs_class_noise_difference_experiment(data_params,  n_examples, n_runs, delta_stars)
+        experiments.append("class_noise_difference")
     if config["experiment"]["fixed_total_noise"]:
         print("Running fixed total noise experiment")
         total_noise = config["experiment"]["fixed_total_noise"]["noise"]  
         fixed_total_noise_experiment(data_params, n_examples, n_runs, total_noise)
+        experiments.append("fixed_total_noise")
     if config["experiment"]["fix_delta0_vary_delta1"]:
         print("Running fixed delta0 vary delta1 experiment")
         delta0_range = config["experiment"]["fix_delta0_vary_delta1"]["delta0_range"]
         delta1_range = config["experiment"]["fix_delta0_vary_delta1"]["delta1_range"]
         fix_delta0_vary_delta1(data_params, n_examples, n_runs, delta0_range, delta1_range)
-
+        experiments.append("fix_delta0_vary_delta1")
+"""
    
 def get_data(data_params, n_examples, n_runs, delta_0, delta_1):
     """
@@ -145,9 +156,9 @@ def auc_vs_class_noise_difference_experiment(data_params, n_examples, n_runs, de
     """
     fig = plt.figure(0)
     for delta_star in delta_stars:
-        deltas = [(delta_star-delta, delta_star+delta) for delta in np.linspace(0, .4, 20)]
+        deltas = [(delta_star-delta/2, delta_star+delta/2) for delta in np.linspace(0, delta_star, 20)]
         scores = scores_deltas(data_params, deltas, n_examples, n_runs)
-        plt.plot(np.linspace(0, .4, 20), scores, label="{}".format(delta_star))
+        plt.plot(np.linspace(0, delta_star, 20), scores, label="{}".format(delta_star))
     plt.xlim(0, .4)
     plt.ylim(0, 1)
     plt.xlabel("Noise Rate Difference")
@@ -198,5 +209,33 @@ def fix_delta0_vary_delta1(data_params, n_examples, n_runs, delta0_range, delta1
     plt.legend()
     plt.savefig("plots/fix_delta0_vary_delta1/dist0_{}_dist1_{}.pdf".format(data_params["dist_0"].info(), data_params["dist_1"].info()))
 
+def generate_all_distribution_plots(data_params, n_examples, delta_0=0.4, delta_1=0):
+    train, val, test = get_data(data_params, n_examples, 1, delta_0, delta_1)
+
+    X_train, y_train, y_train_tildes = train
+    X_test, y_test = test
+    y_train_tilde = y_train_tildes[0]
+    lr = LogisticRegression(solver='lbfgs')
+    lr.fit(X_train, y_train_tilde)
+    y_pred = lr.predict(X_test)
+    score = lr.score(X_test, y_test)
+    f, axes = plt.subplots(2, 2, figsize=(7, 7))
+
+    sns.scatterplot(x=X_train[:, 0], y=X_train[:, 1], hue=y_train, palette="Set2", 
+                    ax=axes[0, 0])
+    axes[0, 0].set_title("Noiseless Train Distribution")
+    sns.scatterplot(x=X_train[:,0], y=X_train[:, 1], hue=y_train_tilde, palette="Set2",
+                    ax=axes[0, 1])
+    axes[0, 1].set_title("Noisy Train Distribution")
+    sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=y_test, palette="Set2",
+                    ax=axes[1, 0])
+    axes[1, 0].set_title("True Test Distribution")
+    sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=y_pred, palette="Set2",
+                    ax=axes[1,1])
+    axes[1, 1].set_title("Predicted Test Distribution")
+    
+    f.savefig("plots/distributions/dist0_{}_dist1_{}.png".format(data_params["dist_0"].info(), data_params["dist_1"].info()))    
+   
 if __name__ == "__main__":
-    main()
+     main()
+#     generate_train_noiseless_plot(data_params)

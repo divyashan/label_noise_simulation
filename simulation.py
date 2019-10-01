@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random
 import pdb
-
-import tensorflow as tf 
-from tensorflow.python import keras
-from keras.models import Sequential
-from keras.layers import Dense, Activation
-from keras.initializers import Zeros
-from keras.optimizers import SGD
+from sklearn import datasets
+#import tensorflow as tf 
+#from tensorflow.python import keras
+#from keras.models import Sequential
+#from keras.layers import Dense, Activation
+#from keras.initializers import Zeros
+#from keras.optimizers import SGD
 
 from utils import plot_data, TestCallback
 
@@ -51,21 +51,26 @@ def gen_data(p, n_examples=100):
             Y[i] = 1
     return X, Y
 
-def gen_data_dist(data_params, n_examples=100):
-    p = data_params["class_split"]
-    dist_1 = data_params["dist_1"]
-    dist_0 = data_params["dist_0"]
-    X = np.zeros((n_examples, 2))
-    Y = np.zeros((n_examples))
+def gen_data_dist(data_params, n_examples=1000):
+    if "clustering" in data_params:
+        X, Y = datasets.make_blobs(n_samples=n_examples, 
+                           n_features=2,
+                           centers= data_params["clustering"]["centers"])
+    else:
+        p = data_params["class_split"]
+        dist_1 = data_params["dist_1"]
+        dist_0 = data_params["dist_0"]
+        X = np.zeros((n_examples, 2))
+        Y = np.zeros((n_examples))
 
-    for i in range(n_examples):
-        rand_num = np.random.rand()
-        if rand_num < p:
-            X[i] = dist_0.sample()
-            Y[i] = 0
-        else:
-            X[i] = dist_1.sample()
-            Y[i] = 1
+        for i in range(n_examples):
+            rand_num = np.random.rand()
+            if rand_num < p:
+                X[i] = dist_0.sample()
+                Y[i] = 0
+            else:
+                X[i] = dist_1.sample()
+                Y[i] = 1
     return X, Y
 
 
