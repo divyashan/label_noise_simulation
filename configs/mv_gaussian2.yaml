@@ -1,5 +1,5 @@
 train:
-    n_examples: 1000
+    n_examples: 10000
     class_split: 0.5
     n_runs: 10
     distribution:
@@ -7,7 +7,7 @@ train:
             name: "gaussian"
             parameters:
                 mean: [0, 0]
-                cov: [[1, 0], [0, 3]]
+                cov: [[1, 0], [0, 1]]
         class_1:
             name: "gaussian"
             parameters:

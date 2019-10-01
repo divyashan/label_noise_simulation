@@ -3,16 +3,8 @@ train:
     class_split: 0.5
     n_runs: 10
     distribution:
-        class_0:
-            name: "gaussian"
-            parameters:
-                mean: [0, 0]
-                cov: [[1, 0], [0, 1]]
-        class_1:
-            name: "gaussian"
-            parameters:
-                mean: [5, 0]
-                cov: [[1, 0], [0, 1]]
+        clustering:
+           centers: 2 
 experiment:
     class_noise_difference:
         delta_stars: [0.1, 0.2, 0.3, 0.4, 0.5]
@@ -21,3 +13,4 @@ experiment:
     fix_delta0_vary_delta1:
         delta0_range: [0.1, 0.4]
         delta1_range: [0.1, 0.9] 
+
