@@ -55,7 +55,6 @@ def main():
         data_params = {"dist_0": dist_0, "dist_1": dist_1, "class_split": class_split}
     generate_all_distribution_plots(data_params, n_examples)   
 
-"""
     experiments = []
     if config["experiment"]["class_noise_difference"]:
         print("Running class noise difference experiment")
@@ -73,7 +72,6 @@ def main():
         delta1_range = config["experiment"]["fix_delta0_vary_delta1"]["delta1_range"]
         fix_delta0_vary_delta1(data_params, n_examples, n_runs, delta0_range, delta1_range)
         experiments.append("fix_delta0_vary_delta1")
-"""
    
 def get_data(data_params, n_examples, n_runs, delta_0, delta_1):
     """
