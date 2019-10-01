@@ -5,6 +5,7 @@ import seaborn as sns
 import random
 import pdb
 from sklearn import datasets
+import bisect
 #import tensorflow as tf 
 #from tensorflow.python import keras
 #from keras.models import Sequential
@@ -53,25 +54,25 @@ def gen_data(p, n_examples=100):
 
 def gen_data_dist(data_params, n_examples=1000):
     if "clustering" in data_params:
-        X, Y = datasets.make_blobs(n_samples=n_examples, 
+        X, y = datasets.make_blobs(n_samples=n_examples, 
                            n_features=2,
                            centers= data_params["clustering"]["centers"])
     else:
         p = data_params["class_split"]
-        dist_1 = data_params["dist_1"]
-        dist_0 = data_params["dist_0"]
+        list_of_dist = []
+        for i in range(data_params["n_classes"]):
+            list_of_dist.append(data_params["dist_{}".format(i)])
         X = np.zeros((n_examples, 2))
-        Y = np.zeros((n_examples))
+        y= np.zeros((n_examples))
 
+        prob_dist = [sum(p[:i]) for i in range(len(p))]
+        prob_dist.append(1)
         for i in range(n_examples):
             rand_num = np.random.rand()
-            if rand_num < p:
-                X[i] = dist_0.sample()
-                Y[i] = 0
-            else:
-                X[i] = dist_1.sample()
-                Y[i] = 1
-    return X, Y
+            class_num = bisect.bisect_left(prob_dist, rand_num)-1 
+            X[i] = data_params["dist_{}".format(class_num)].sample()
+            y[i] = class_num 
+    return X, y
 
 
 def add_noise_to_class(delta, label, y):
@@ -82,7 +83,21 @@ def add_noise_to_class(delta, label, y):
             y_tilde[i] = abs(label-1) if np.random.rand() < delta else label 
     return y_tilde
 
-def gen_corrupted_labels(delta_0, delta_1, y):
+def gen_corrupted_labels(delta_matrix, y):
+    y_tilde = np.copy(y)
+    flip = {}
+    for i in range(len(delta_matrix)):
+        prob_dist = [sum(delta_matrix[i][:j]) for j in range(len(delta_matrix[i]))]
+        prob_dist.append(1)
+        flip[i] = {j:bisect.bisect_left(prob_dist, np.random.rand())-1  for j, a in enumerate(y) if a==j}
+
+    for i in range(len(flip)):
+        for j in flip[i]:
+            y_tilde[j] = flip[i][j]
+
+    return y_tilde
+
+def gen_corrupted_labels_binary(delta_0, delta_1, y):
     
     # dictionaries of indices mapped to whether or not the value 
     # should be flipped

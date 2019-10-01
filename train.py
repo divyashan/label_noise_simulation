@@ -31,30 +31,39 @@ def main():
     with open(config_file) as fp:
         config = yaml.load(fp, yaml.Loader)
 
-    n_examples = config["train"]["n_examples"]
-    class_split = config["train"]["class_split"]
-    n_runs = config["train"]["n_runs"] 
-    
-    if "clustering" in config["train"]["distribution"]:
-        data_params = config["train"]["distribution"] 
-        data_params["dist_0"] = DISTRIBUTIONS["blob"]() 
-        data_params["dist_1"] = DISTRIBUTIONS["blob"]()
-    else: 
-        dist_0_name = config["train"]["distribution"]["class_0"]["name"]
-        dist_1_name = config["train"]["distribution"]["class_1"]["name"]
-    
-        if config["train"]["distribution"]["class_0"]["parameters"]:
-            dist_0 = DISTRIBUTIONS[dist_0_name](**config["train"]["distribution"]["class_0"]["parameters"])
-        else:
-            dist_0 = DISTRIBUTIONS[dist_0_name]()
+    train = config["train"]
+    n_classes = train["n_classes"]
+    n_examples = train["n_examples"]
+    class_split = train["class_split"]
+    n_runs = train["n_runs"] 
 
-        if config["train"]["distribution"]["class_1"]["parameters"]:
-            dist_1 = DISTRIBUTIONS[dist_1_name](**config["train"]["distribution"]["class_1"]["parameters"])
-        else:
-            dist_1 = DISTRIBUTIONS[dist_1_name]()
-        data_params = {"dist_0": dist_0, "dist_1": dist_1, "class_split": class_split}
-    generate_all_distribution_plots(data_params, n_examples)   
+     
+    if "clustering" in train["distribution"]:
+        data_params = config["train"]["distribution"]
+        data_params["class_split"] =  class_split
+        data_params["n_classes"] =  n_classes
+        for i in range(n_classes): 
+            data_params["dist_{}".format(i)] = DISTRIBUTIONS["blob"]()
 
+        assert(n_classes == train["distribution"]["clustering"]["centers"]) 
+    else:
+        data_params = {}
+        data_params["class_split"] =  class_split
+        data_params["n_classes"] =  n_classes
+ 
+        for i in range(n_classes): 
+            dist_name = config["train"]["distribution"]["class_{}".format(i)]["name"]
+    
+            if config["train"]["distribution"]["class_{}".format(i)]["parameters"]:
+                dist = DISTRIBUTIONS[dist_name](**config["train"]["distribution"]["class_{}".format(i)]["parameters"])
+            else:
+                dist = DISTRIBUTIONS[dist_name]()
+            data_params["dist_{}".format(i)] = dist
+        assert(n_classes == len(train["distribution"].keys())) 
+   
+    delta_matrix = config["plots"]["delta_matrix"] 
+    generate_all_distribution_plots(data_params, n_examples, delta_matrix)   
+"""
     experiments = []
     if config["experiment"]["class_noise_difference"]:
         print("Running class noise difference experiment")
@@ -72,8 +81,9 @@ def main():
         delta1_range = config["experiment"]["fix_delta0_vary_delta1"]["delta1_range"]
         fix_delta0_vary_delta1(data_params, n_examples, n_runs, delta0_range, delta1_range)
         experiments.append("fix_delta0_vary_delta1")
+"""
    
-def get_data(data_params, n_examples, n_runs, delta_0, delta_1):
+def get_data(data_params, n_examples, n_runs, delta_matrix):
     """
     Method that returns three datasets
         1. Training set with corrupted and n_runs sets of 
@@ -96,11 +106,11 @@ def get_data(data_params, n_examples, n_runs, delta_0, delta_1):
     X_train, y_train = X[:N_TRAIN], y[:N_TRAIN]
     X_val, y_val = X[N_TRAIN:N_TRAIN+N_VAL], y[N_TRAIN:N_TRAIN+N_VAL]
     X_test, y_test = X[N_TRAIN+N_VAL:], y[N_TRAIN+N_VAL:]
-    y_train_tildes = [gen_corrupted_labels(delta_0, delta_1, y_train) for i in range(n_runs)]
+    y_train_tildes = [gen_corrupted_labels(delta_matrix, y_train) for i in range(n_runs)]
 
     return [(X_train, y_train, y_train_tildes), (X_val,  y_val), (X_test, y_test)]
 
-def score_delta(data_params, n_examples, n_runs, delta_0, delta_1):
+def score_delta(data_params, n_examples, n_runs, delta_matrix):
     """
     Method that returns the average score of a Logistic
     Regression model on a test set where the training data has
@@ -114,7 +124,8 @@ def score_delta(data_params, n_examples, n_runs, delta_0, delta_1):
         delta_0: the probability that we flip labels that are equal to 0
         delta_1: the probability that we flip labels that are equal to 1
     """
-    train, val, test = get_data(data_params, n_examples, n_runs, delta_0, delta_1)
+
+    train, val, test = get_data(data_params, n_examples, n_runs, delta_matrix)
     X_train, y_train, y_train_tildes = train
     X_val,  y_val = val
     X_test, y_test = test
@@ -142,7 +153,8 @@ def scores_deltas(data_params, delta_vals, n_examples, n_runs):
     """
     scores = []
     for delta_0, delta_1 in delta_vals:
-            scores.append(score_delta(data_params, n_examples, n_runs, delta_0, delta_1))
+        delta_matrix = [[1-delta_0, delta_0], [delta_1, 1-delta_1]]
+        scores.append(score_delta(data_params, n_examples, n_runs, delta_matrix))
     return scores
 
 def auc_vs_class_noise_difference_experiment(data_params, n_examples, n_runs, delta_stars):
@@ -207,17 +219,20 @@ def fix_delta0_vary_delta1(data_params, n_examples, n_runs, delta0_range, delta1
     plt.legend()
     plt.savefig("plots/fix_delta0_vary_delta1/dist0_{}_dist1_{}.pdf".format(data_params["dist_0"].info(), data_params["dist_1"].info()))
 
-def generate_all_distribution_plots(data_params, n_examples, delta_0=0.4, delta_1=0):
-    train, val, test = get_data(data_params, n_examples, 1, delta_0, delta_1)
+def generate_all_distribution_plots(data_params, n_examples, delta_matrix):
+    train, val, test = get_data(data_params, n_examples, 1, delta_matrix)
 
     X_train, y_train, y_train_tildes = train
     X_test, y_test = test
     y_train_tilde = y_train_tildes[0]
-    lr = LogisticRegression(solver='lbfgs')
+    lr = LogisticRegression(solver='lbfgs', multi_class="multinomial")
     lr.fit(X_train, y_train_tilde)
     y_pred = lr.predict(X_test)
-    score = lr.score(X_test, y_test)
-    f, axes = plt.subplots(2, 2, figsize=(7, 7))
+    lr2 = LogisticRegression(solver='lbfgs', multi_class="multinomial")
+    lr2.fit(X_train, y_train)
+    y_pred_noiseless = lr2.predict(X_test)
+ 
+    f, axes = plt.subplots(2, 3, figsize=(14, 7))
 
     sns.scatterplot(x=X_train[:, 0], y=X_train[:, 1], hue=y_train, palette="Set2", 
                     ax=axes[0, 0])
@@ -226,14 +241,27 @@ def generate_all_distribution_plots(data_params, n_examples, delta_0=0.4, delta_
                     ax=axes[0, 1])
     axes[0, 1].set_title("Noisy Train Distribution")
     sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=y_test, palette="Set2",
-                    ax=axes[1, 0])
-    axes[1, 0].set_title("True Test Distribution")
+                    ax=axes[1, 2])
+    axes[1, 2].set_title("True Test Distribution")
     sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=y_pred, palette="Set2",
                     ax=axes[1,1])
-    axes[1, 1].set_title("Predicted Test Distribution")
+    axes[1, 1].set_title("Trained on Noisy, Predicted Test Distribution")
+    sns.scatterplot(x=X_test[:, 0], y=X_test[:, 1], hue=y_pred_noiseless, palette="Set2",
+                    ax=axes[1,0])
+    axes[1, 0].set_title("Trained on Clean, Predicted Test Distribution")
     
-    f.savefig("plots/distributions/dist0_{}_dist1_{}.png".format(data_params["dist_0"].info(), data_params["dist_1"].info()))    
-   
+    
+    f.savefig("plots/distributions/{}.png".format(summarize_data_params(data_params)))    
+
+def summarize_data_params(data_params):
+    if "clustering" in data_params:
+        return "blobs_{}_centers".format(data_params["clustering"]["centers"])
+    else:
+        s = ""
+        for i in range(data_params["n_classes"]):
+             s += "dist{}_{}".format(i, data_params["dist_{}".format(i)].info())
+
+        return s
 if __name__ == "__main__":
      main()
 #     generate_train_noiseless_plot(data_params)

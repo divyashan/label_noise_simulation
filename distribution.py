@@ -11,12 +11,13 @@ class MultivariateGaussian(object):
         return "mv_gaussian_mean_{}_cov_{}".format(self.mean, self.cov)
 
 class Exponential(object):
-    def __init__(self, scale):
+    def __init__(self, scale, mean=0):
         self.scale = scale
+        self.mean = mean
     def sample(self, n=2):
-        return np.random.exponential(self.scale, n)
+        return np.random.exponential(self.scale, n) + self.mean
     def info(self):
-        return "exponential_scale_{}".format(self.scale)
+        return "exponential_mean_{}_scale_{}".format(self.mean, self.scale)
 
 class Uniform(object):
     def __init__(self, low, high):
