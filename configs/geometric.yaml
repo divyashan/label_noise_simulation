@@ -1,7 +1,7 @@
 train:
     n_examples: 10000
     class_split: [0.5, 0.5]
-    n_runs: 10
+    n_runs: 5
     n_classes: 2
     distribution:
        class_0:

@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+#import matplotlib.pyplot as plt
 import random
 import pdb
-from sklearn import datasets
+#from sklearn import datasets
 import bisect
+#import seaborn as sns
 #import tensorflow as tf 
 #from tensorflow.python import keras
 #from keras.models import Sequential
@@ -13,16 +13,16 @@ import bisect
 #from keras.initializers import Zeros
 #from keras.optimizers import SGD
 
-from utils import plot_data, TestCallback
+#from utils import plot_data, TestCallback
 
 IMAGE_DIR = "./plots/"
 N_EXAMPLE_OPTS = [100, 200, 1000]
 
 # Plot styles
-sns.set_style("whitegrid")
-flat_ui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
-sns.set_palette(sns.hls_palette(8, l=.3, s=.8))
-palette = sns.hls_palette(8, l=.3, s=.8)
+#sns.set_style("whitegrid")
+#flat_ui = ["#9b59b6", "#3498db", "#95a5a6", "#e74c3c", "#34495e", "#2ecc71"]
+#sns.set_palette(sns.hls_palette(8, l=.3, s=.8))
+#palette = sns.hls_palette(8, l=.3, s=.8)
 
 random.seed(1000)
 N_EPOCHS = 50
@@ -62,7 +62,7 @@ def gen_data_dist(data_params, n_examples=1000):
         list_of_dist = []
         for i in range(data_params["n_classes"]):
             list_of_dist.append(data_params["dist_{}".format(i)])
-        X = np.zeros((n_examples, 2))
+        X = np.zeros((n_examples, len(data_params["dist_0"].mean)))
         y= np.zeros((n_examples))
 
         prob_dist = [sum(p[:i]) for i in range(len(p))]
@@ -89,12 +89,15 @@ def gen_corrupted_labels(delta_matrix, y):
     for i in range(len(delta_matrix)):
         prob_dist = [sum(delta_matrix[i][:j]) for j in range(len(delta_matrix[i]))]
         prob_dist.append(1)
-        flip[i] = {j:bisect.bisect_left(prob_dist, np.random.rand())-1  for j, a in enumerate(y) if a==j}
-
+        flip[i] = {j:bisect.bisect_left(prob_dist, np.random.rand())-1  for j, a in enumerate(y) if a==i}
     for i in range(len(flip)):
         for j in flip[i]:
             y_tilde[j] = flip[i][j]
 
+#    count = check_noise_rates(len(delta_matrix), y, y_tilde)
+#    for i in range(len(count)):
+#        for j in range(len(count[i])):
+#             print("Noise Rate {}{}".format(i, j), count[i][j], delta_matrix[i][j]) 
     return y_tilde
 
 def gen_corrupted_labels_binary(delta_0, delta_1, y):
@@ -112,8 +115,23 @@ def gen_corrupted_labels_binary(delta_0, delta_1, y):
     for index in flip_one:
         if flip_one[index]:
             y_tilde[index] = 0
+
+    count = check_noise_rates(2, y, y_tilde)
+    assert(delta_0 == count[0][1])
+    assert(delta_1 == count[1][0])
+
     return y_tilde
 
+def check_noise_rates(n_classes, y_train, y_tilde):
+    noise_rates  = [[0 for i in range(n_classes)] for j in range(n_classes)]
+    n = len(y_train)
+    count = [0 for i in range(n_classes)]
+    for i in range(n):
+        count[int(y_train[i])] += 1
+    for i in range(n):
+        noise_rates[int(y_train[i])][int(y_tilde[i])] += 1/count[int(y_train[i])]
+    return noise_rates
+     
 def build_model():
     model = Sequential()
     model.add(Dense(1, kernel_initializer= Zeros(), input_shape=(2,)))
@@ -178,7 +196,6 @@ def run_test(p = .5, delta_0=0, delta_1=None, n_examples=100, n_noise_runs=5):
     plt.ylabel("theta[1]")
     plt.title("Delta_0 = " + str(delta_0) + " // Delta_1 = " + str(delta_1) + " // P = " + str(p) + " // N = " + str(n_examples))
     plt.savefig(IMAGE_DIR + str(p) + "_" + str(delta_0) + "_" + str(delta_1) + "_" + str(n_examples) + ".png")
-plt.clf()
 
 
 

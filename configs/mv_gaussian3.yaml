@@ -1,7 +1,7 @@
 train:
     n_examples: 10000
     class_split: [0.5, 0.5]
-    n_runs: 10
+    n_runs: 5
     n_classes: 2
     distribution:
         class_0:
@@ -12,13 +12,15 @@ train:
         class_1:
             name: "gaussian"
             parameters:
-                mean: [-1, -1]
-                cov: [[2, 0], [0, 2]]
+                mean: [1, 0]
+                cov: [[1, 0], [0, 1]]
 experiment:
     class_noise_difference:
         delta_stars: [0.1, 0.2, 0.3, 0.4, 0.5]
     fixed_total_noise:
-        noise: [0.2, 0.4, 0.6, 0.8]
+        noise: [0, 0.2, 0.4, 0.6, 0.8]
     fix_delta0_vary_delta1:
-        delta0_range: [0.1, 0.4]
-        delta1_range: [0.1, 0.9] 
+        delta0_range: [0,  0.4]
+        delta1_range: [0, 0.9]
+plots:
+#    delta_matrix: [[0.8, 0.2], [0.3, 0.7]] 
