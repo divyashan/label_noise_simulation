@@ -69,7 +69,8 @@ def main():
                original_delta_matrix.append(row_list)
            original_delta_matrix = np.array(original_delta_matrix)
            multiclass_noise_advanced(data_params, original_delta_matrix)     
-
+        if config["experiment"]["multiclass_simple"]:
+           multiclass_noise_simple(data_params)     
     else:
         if config["experiment"]["class_noise_difference"]:
             print("Running class noise difference experiment")
@@ -221,7 +222,6 @@ def auc_vs_class_noise_difference_experiment(data_params, delta_stars):
 def multiclass_noise_advanced(data_params, original_delta_matrix):
     """
     """
-    print(original_delta_matrix)
     flip_correct_probs = [original_delta_matrix[i][i] for i in range(len(original_delta_matrix))]
     row_with_max_noise = flip_correct_probs.index(min(flip_correct_probs))
 
@@ -240,7 +240,7 @@ def multiclass_noise_advanced(data_params, original_delta_matrix):
     std_devs = []
     for i in range(len(noise_amounts)):
         new_delta_matrix = original_delta_matrix + noise_amounts[i] * noise_addition_matrix
-        score, std, confusion_matrices = score_delta(data_params, n_examples, n_runs, new_delta_matrix)
+        score, std, confusion_matrices = score_delta(data_params, new_delta_matrix)
         scores.append(score)
         std_devs.append(std)
 
@@ -260,6 +260,37 @@ def multiclass_noise_advanced(data_params, original_delta_matrix):
     plt.legend()
     plt.savefig("multiclass/deltas_{}.png".format(deltas))
 
+
+def multiclass_noise_simple(data_params):
+    """
+    """
+    noise_amounts = np.linspace(0, 1, 30)
+
+    scores = []
+    std_devs = []
+    for i in range(len(noise_amounts)):
+        original_delta_matrix = np.identity(data_params["n_classes"])
+        original_delta_matrix[0][0] = 1- noise_amounts[i]
+        original_delta_matrix[0][1] = noise_amounts[i]
+        for j in range(data_params["n_classes"]):
+            original_delta_matrix[1][j] = 0.15
+        original_delta_matrix[1][1] = 0.55
+        score, std, confusion_matrices = score_delta(data_params, original_delta_matrix)
+        scores.append(score)
+        std_devs.append(std)
+
+    xmax = noise_amounts[xpos]
+
+    plt.errorbar(noise_amounts, scores, yerr=std_devs, label="nonuniform")
+    plt.annotate('max: {}'.format(ymax), xy=(xmax, ymax), xytext=(xmax, ymax+5),
+            arrowprops=dict(facecolor='black', shrink=0.05),
+            )        
+    plt.xlim(0, noise_amounts[-1])
+    plt.ylim(0, 1)
+    plt.xlabel("Noise added")
+    plt.title("Multiclass Label Perturbation- Vary Delta0")
+    plt.legend()
+    plt.savefig("multiclass/simple.png")
 
 def fixed_total_noise_experiment(data_params, total_noise_vals):
     """

@@ -11,12 +11,14 @@ from logistic_regression import LogisticRegression
 from trainer import Trainer
 from tensorboardX import SummaryWriter
 from noisy_dataset import NoisyDataset
-
+from modules import get_model
 DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/upna_train.yaml"
 
 def get_dataset(dataset, delta_matrix, batch_size):
-    transform = transforms.Compose([transforms.ToTensor(),
+    cifar10_transform = transforms.Compose([transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+    mnist_transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.1307,), (0.3081,))]) 
     if dataset =="CIFAR10":
         trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
@@ -28,23 +30,20 @@ def get_dataset(dataset, delta_matrix, batch_size):
                                        download=True, transform=transform)
         testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                          shuffle=False, num_workers=1)
+    elif dataset == "MNIST":
+        trainset = torchvision.datasets.MNIST(root='./data', train=True,
+                                        download=True, transform=mnist_transform)
+        tilde_trainset = NoisyDataset(trainset, delta_matrix)
+        trainloader = torch.utils.data.DataLoader(tilde_trainset, batch_size=batch_size,
+                                          shuffle=True, num_workers=1)
 
+        testset = torchvision.datasets.MNIST(root='./data', train=False,
+                                       download=True, transform=mnist_transform)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                         shuffle=False, num_workers=1)
+ 
     return trainloader, testloader
 
-def get_model(name, num_classes):
-    if name == "LogisticRegression":
-        model = LogisticRegression(3072, num_classes)
-    else:
-        function = getattr(models, name)
-        model = function(pretrained=False)
-        if "resnet" in name:
-            model.fc = nn.Linear(512, num_classes)
-        else:
-            model = nn.Sequential(*(list(model.children())[:-1]))
-            model.classifier.add_module('6', nn.Linear(
-                list(model.classifier.children()))[-3].in_features, num_classes)
-
-    return model
 
 def main():
     """ Loads arguments and starts training."""
@@ -65,7 +64,8 @@ def main():
 
     model_name = config["train"]["model"]
     num_classes = config["train"]["num_classes"]
-    model = get_model(model_name, num_classes)
+    num_channels = config["train"]["num_channels"]
+    model = get_model(model_name, pretrained=False, num_channels=num_channels, num_classes=num_classes)
     model.to(device)
     print("Model name: {}".format(model_name))
 
@@ -84,10 +84,6 @@ def main():
 
     else:
         start_epoch = 0
-#    if model_name == "LogisticRegression":
-#        batch_size = 1
-#    else:
-#        batch_size = 32
     batch_size = 32
     train_loader, val_loader  = get_dataset(config["data_loader"]["name"], config["data_loader"]["delta_matrix"], batch_size)
 

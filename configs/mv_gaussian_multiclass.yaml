@@ -7,28 +7,28 @@ train:
         class_0:
             name: "gaussian"
             parameters:
-                mean: [0, 3]
-                cov: [[1, 0], [0, 1]]
+                mean: [0, 1]
+                cov: [[2, 0], [0, 2]]
         class_1:
             name: "gaussian"
             parameters:
-                mean: [3, 0]
+                mean: [1, 0]
                 cov: [[2, 0], [0, 2]]
         class_2:
             name: "gaussian"
             parameters:
-                mean: [0, -3]
+                mean: [0, -1]
                 cov: [[2, 0], [0, 1]]
         class_3:
             name: "gaussian"
             parameters:
-                mean: [-3, 0]
+                mean: [-1, 0]
                 cov: [[1, 0], [0, 2]]
 experiment:
-    multiclass_simple:
+    multiclass_simple: True
 #        delta_0: 0.3
 #        delta_1: 0.6
     multiclass_advanced:
-        deltas: [0.3, 0.6, 0, 0]
+#        deltas: [0.3, 0.3, 0, 0]
 plots:
     delta_matrix: [[1, 0, 0, 0], [0.1, 0.7, 0.1, 0.1], [0, 0, 1, 0], [0, 0, 0, 1]]
