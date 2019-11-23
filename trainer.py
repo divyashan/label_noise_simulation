@@ -1,5 +1,40 @@
 import torch
 import torch.nn as nn
+import torchvision
+import torchvision.transforms as transforms
+from noisy_dataset import NoisyDataset
+
+def get_dataset(dataset, delta_matrix, augmentations, input_shape,  batch_size):
+    if "hflip" and "five_crop" in augmentations:
+        c, h, w = input_shape[0], input_shape[1], input_shape[2]
+        size = int(0.875 * h)
+        transform = transforms.Compose([transforms.RandomHorizontalFlip(), 
+                                            transforms.RandomApply([transforms.RandomCrop(size), transforms.Resize((h, w))]),
+                                            transforms.ToTensor()]) 
+    if dataset =="CIFAR10":
+        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform)
+        tilde_trainset = NoisyDataset(trainset, delta_matrix)
+        trainloader = torch.utils.data.DataLoader(tilde_trainset, batch_size=batch_size,
+                                          shuffle=True, num_workers=1)
+
+        testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                       download=True, transform=transform)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                         shuffle=False, num_workers=1)
+    elif dataset == "MNIST":
+        trainset = torchvision.datasets.MNIST(root='./data', train=True,
+                                        download=True, transform=transform)
+        tilde_trainset = NoisyDataset(trainset, delta_matrix)
+        trainloader = torch.utils.data.DataLoader(tilde_trainset, batch_size=batch_size,
+                                          shuffle=True, num_workers=1)
+
+        testset = torchvision.datasets.MNIST(root='./data', train=False,
+                                       download=True, transform=transform)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                         shuffle=False, num_workers=1)
+ 
+    return trainloader, testloader
 
 
 class Trainer(object):
@@ -51,6 +86,7 @@ class Trainer(object):
                 self.adjust_learning_rate()
             self._writer_train.add_scalar('data/loss', loss,
                                     i + len(self._train_loader) * epoch)
+            self._writer_train.add_image('img', input_var[0], i + len(self._train_loader) * epoch)
             print("Epoch: [{0}][{1}/{2}]\t Loss {loss:.4f} ".format(
                     epoch, i, len(self._train_loader), loss=loss))
 

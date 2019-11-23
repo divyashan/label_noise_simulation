@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset
 from simulation import gen_corrupted_labels
+import random
 
 def add_noise_to_labels(trainset, delta_matrix):
    tilde_labels = gen_corrupted_labels(delta_matrix, trainset.targets) 
@@ -20,7 +21,7 @@ class NoisyDataset(Dataset):
         self.original_dataset = original_dataset
         self.delta_matrix = delta_matrix
         self.corrupted_labels = add_noise_to_labels(original_dataset, delta_matrix)
- 
+    
     def __len__(self):
         return len(self.corrupted_labels)
 

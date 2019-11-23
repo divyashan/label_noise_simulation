@@ -3,46 +3,13 @@ import torch
 import torch.optim as optim
 import yaml
 import os
-import torchvision
-import torchvision.transforms as transforms
 import torchvision.models as models
 import torch.nn as nn
 from logistic_regression import LogisticRegression
-from trainer import Trainer
+from trainer import Trainer, get_dataset
 from tensorboardX import SummaryWriter
-from noisy_dataset import NoisyDataset
 from modules import get_model
-DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/upna_train.yaml"
-
-def get_dataset(dataset, delta_matrix, batch_size):
-    cifar10_transform = transforms.Compose([transforms.ToTensor(),
-                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-    mnist_transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.1307,), (0.3081,))]) 
-    if dataset =="CIFAR10":
-        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                        download=True, transform=transform)
-        tilde_trainset = NoisyDataset(trainset, delta_matrix)
-        trainloader = torch.utils.data.DataLoader(tilde_trainset, batch_size=batch_size,
-                                          shuffle=True, num_workers=1)
-
-        testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                       download=True, transform=transform)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                         shuffle=False, num_workers=1)
-    elif dataset == "MNIST":
-        trainset = torchvision.datasets.MNIST(root='./data', train=True,
-                                        download=True, transform=mnist_transform)
-        tilde_trainset = NoisyDataset(trainset, delta_matrix)
-        trainloader = torch.utils.data.DataLoader(tilde_trainset, batch_size=batch_size,
-                                          shuffle=True, num_workers=1)
-
-        testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                       download=True, transform=mnist_transform)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                         shuffle=False, num_workers=1)
- 
-    return trainloader, testloader
+DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/mnist_clean.yaml"
 
 
 def main():
@@ -64,7 +31,8 @@ def main():
 
     model_name = config["train"]["model"]
     num_classes = config["train"]["num_classes"]
-    num_channels = config["train"]["num_channels"]
+    input_shape = config["data_loader"]["input_shape"]
+    num_channels = input_shape[0]
     model = get_model(model_name, pretrained=False, num_channels=num_channels, num_classes=num_classes)
     model.to(device)
     print("Model name: {}".format(model_name))
@@ -85,7 +53,8 @@ def main():
     else:
         start_epoch = 0
     batch_size = 32
-    train_loader, val_loader  = get_dataset(config["data_loader"]["name"], config["data_loader"]["delta_matrix"], batch_size)
+    augmentations = config["data_loader"]["augmentations"]
+    train_loader, val_loader  = get_dataset(config["data_loader"]["name"], config["data_loader"]["delta_matrix"], augmentations, input_shape, batch_size)
 
     if not os.path.exists(config["train"]["save_dir"]):
         os.makedirs(config["train"]["save_dir"])
