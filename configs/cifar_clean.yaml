@@ -14,7 +14,7 @@ data_loader:
                  [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.]]
 train:
   device: "cuda:0"
-  num_epochs: 20
+  num_epochs: 50
   model: "resnet18"
   learning_rate: 0.005
   save_dir: "models/cifar_clean"

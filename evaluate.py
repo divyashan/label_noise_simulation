@@ -13,17 +13,14 @@ DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/mnist_test.yaml"
 
 
 def get_tta_dataset(dataset, augmentations, batch_size):
-    cifar10_transform = transforms.Compose([transforms.ToTensor(),
-                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-    mnist_transform = transforms.Compose([transforms.ToTensor()]) 
+    transform = transforms.Compose([transforms.ToTensor()]) 
 
     if dataset =="CIFAR10":
         testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                       download=True, transform=cifar10_transform)
+                                       download=True, transform=transform)
     elif dataset == "MNIST":
         testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                       download=True, transform=mnist_transform)
+                                       download=True, transform=transform)
     testset = TTADataset(testset, augmentations)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                          shuffle=False, num_workers=1)
@@ -34,7 +31,7 @@ def get_tta_dataset(dataset, augmentations, batch_size):
 def load_model(model_path, device, config):
     model_name = config["test"]["model"]
     num_classes = config["test"]["num_classes"]
-    num_channels = config["test"]["num_channels"]
+    num_channels = config["data_loader"]["input_shape"][0]
     model = get_model(model_name, pretrained=False, num_channels=num_channels, num_classes=num_classes)
     model.to(device)
     print("Loading {} into {}".format(model_path, model_name))
@@ -62,6 +59,11 @@ def main():
     models_names = config["test"]["models_names"]
     models_paths = config["test"]["models_paths"]
     true_delta_matrices = config["test"]["true_delta_matrices"]
+    num_classes = config["test"]["num_classes"]
+    for matrix in true_delta_matrices:
+        assert(len(matrix) == num_classes)
+        for row in range(len(matrix)):
+            assert(len(matrix[row]) == num_classes)
     batch_size = 1
     augmentations = config["data_loader"]["augmentations"]
     print("TTA AUGMENTATIONS: {}".format(augmentations))
@@ -72,7 +74,7 @@ def main():
 
     for i in range(len(models_names)):
         model, num_classes = load_model(models_paths[i], device, config)
-        run_evaluation(models_names[i], torch.Tensor(true_delta_matrices[i]), augmentations, model, device, num_classes, val_loader, writer_val)
+        run_evaluation(models_names[i], torch.eye(10), augmentations, model, device, num_classes, val_loader, writer_val)
         
 def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, num_classes, val_loader, writer):
         mse = torch.nn.MSELoss(reduction = "sum")
@@ -83,6 +85,7 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, 
         label_noise_matrix = torch.zeros(num_classes, num_classes)
         size = int(len(val_loader) * eval_fraction)
         accuracy = 0
+        print("only use correct examples for label noise matrix")
         for i in range(size):
             data = val_load_iter.next()
             target_var = data["label"].float().to(device)
@@ -90,8 +93,8 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, 
             if pred_class.item() == target_var.item():
                 accuracy += 1
                 # compute output
-            label_noise_matrix[int(target_var.item())] += output 
-            counts[int(target_var.item())] += 1.
+                label_noise_matrix[int(target_var.item())] += output 
+                counts[int(target_var.item())] += 1.
            # measure accuracy and record loss
         for j in range(num_classes):
             label_noise_matrix[j] /= counts[j]
