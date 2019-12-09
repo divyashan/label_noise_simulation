@@ -8,7 +8,9 @@ import torchvision
 import torchvision.transforms as transforms
 from tta_dataset import TTADataset
 from tensorboardX import SummaryWriter
-
+import matplotlib.pyplot as plt
+plt.switch_backend('agg')
+import seaborn as sns
 DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/mnist_test.yaml"
 
 
@@ -74,8 +76,9 @@ def main():
 
     for i in range(len(models_names)):
         model, num_classes = load_model(models_paths[i], device, config)
-        run_evaluation(models_names[i], torch.eye(10), augmentations, model, device, num_classes, val_loader, writer_val)
-        
+        true_delta_matrix, label_noise_matrix = run_evaluation(models_names[i], true_delta_matrices[i], augmentations, model, device, num_classes, val_loader, writer_val)
+        generate_heatmap(true_delta_matrix, label_noise_matrix, models_names[i])
+
 def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, num_classes, val_loader, writer):
         mse = torch.nn.MSELoss(reduction = "sum")
         model.eval()
@@ -101,6 +104,15 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, 
 
         error = mse(label_noise_matrix, true_delta_matrix)
         print("Model: {}, LM Error: {}, Acc: {}".format(name_model, error, accuracy/size))
+        return true_delta_matrix, label_noise_matrix
+def generate_heatmap(true_delta_matrix, label_noise_matrix, name):
+    fig, ax = plt.subplots(1, 3, gridspec_kw={'width_ratios':[1, 1, 0.08]}, figsize=(16, 8))
+    plt.title(name)
+    g1 =sns.heatmap(true_delta_matrix, cbar=False, ax=ax[0])
+    ax[0].set_title("True Noise Matrix")
+    ax[1].set_title("Estimated Label Noise Matrix")
+    g2 = sns.heatmap(label_noise_matrix, cbar_ax=ax[2], ax=ax[1])
+    plt.savefig('heatmaps/{}.png'.format(name))
 
 def run_inference_on_augmentations(model, data, augmentations, num_classes, device, writer):
     aggregated = torch.zeros(num_classes).float()
