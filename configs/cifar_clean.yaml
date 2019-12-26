@@ -1,6 +1,6 @@
 data_loader:
   name: "CIFAR10"
-  augmentations: ["hflip", "five_crop"]
+  augmentations: ["rot"]
   input_shape: [3, 32, 32]
   delta_matrix: [[1, 0, 0., 0., 0., 0., 0., 0., 0., 0.],
                  [0., 1, 0, 0., 0., 0., 0., 0., 0., 0.],
@@ -17,7 +17,7 @@ train:
   num_epochs: 50
   model: "resnet18"
   learning_rate: 0.005
-  save_dir: "models/cifar_clean"
-  save_as: "cifar_clean"
+  save_dir: "models/rot/cifar_clean"
+  save_as: "rot/cifar_clean"
   num_classes: 10
   resume: False 

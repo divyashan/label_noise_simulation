@@ -11,7 +11,8 @@ from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 import seaborn as sns
-DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/mnist_test.yaml"
+import numpy as np
+DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/cifar_test.yaml"
 
 
 def get_tta_dataset(dataset, augmentations, batch_size):
@@ -67,17 +68,33 @@ def main():
         for row in range(len(matrix)):
             assert(len(matrix[row]) == num_classes)
     batch_size = 1
-    augmentations = config["data_loader"]["augmentations"]
-    print("TTA AUGMENTATIONS: {}".format(augmentations))
-    val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size)
-    writer_val = SummaryWriter(
-        "runs/evaluate/validation")
+    list_of_augmentations = config["data_loader"]["augmentations"]
+    print("TTA AUGMENTATIONS: {}".format(list_of_augmentations))
+    accuracy_given_auglist=[] 
+    for augmentations in list_of_augmentations:
+        val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size)
+        writer_val = SummaryWriter(
+        "runs/evaluate/validation/{}".format(",".join(augmentations)))
+        for i in range(len(models_names)):
+            model, num_classes = load_model(models_paths[i], device, config)
+            acc, label_noise_matrix = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, model, device, num_classes, val_loader, writer_val)
+            generate_heatmap(torch.tensor(true_delta_matrices[i]), label_noise_matrix, models_names[i])
+            accuracy_given_auglist.append(acc)
 
+    plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist)
 
-    for i in range(len(models_names)):
-        model, num_classes = load_model(models_paths[i], device, config)
-        true_delta_matrix, label_noise_matrix = run_evaluation(models_names[i], true_delta_matrices[i], augmentations, model, device, num_classes, val_loader, writer_val)
-        generate_heatmap(true_delta_matrix, label_noise_matrix, models_names[i])
+def plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist):
+
+    objects = [", ".join(i) for i in list_of_augmentations]
+    y_pos = np.arange(len(objects))
+    performance = accuracy_given_auglist
+
+    plt.bar(y_pos, performance, align='center', alpha=0.5)
+    plt.xticks(y_pos, objects)
+    plt.ylabel('Accuracy')
+    plt.title('Augmentation')
+
+    plt.savefig('plots/aug_accuracy.pdf')
 
 def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, num_classes, val_loader, writer):
         mse = torch.nn.MSELoss(reduction = "sum")
@@ -102,27 +119,40 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, 
         for j in range(num_classes):
             label_noise_matrix[j] /= counts[j]
 
-        error = mse(label_noise_matrix, true_delta_matrix)
-        print("Model: {}, LM Error: {}, Acc: {}".format(name_model, error, accuracy/size))
+        
+        mse_error = mse(label_noise_matrix, true_delta_matrix)
+        kl_error = torch.zeros(len(label_noise_matrix))
+        for i in range(len(label_noise_matrix)):
+            kl_error[i] += torch.nn.functional.kl_div(label_noise_matrix[i],true_delta_matrix[i], 0)
+        mean_kl = kl_error.mean()
+        std_dev_kl = kl_error.std()
+        print("Model: {}, MSE Error: {}, KL Error: {} +- {}, Acc: {}".format(name_model, mse_error, mean_kl, std_dev_kl, accuracy/size))
         return true_delta_matrix, label_noise_matrix
+
 def generate_heatmap(true_delta_matrix, label_noise_matrix, name):
-    fig, ax = plt.subplots(1, 3, gridspec_kw={'width_ratios':[1, 1, 0.08]}, figsize=(16, 8))
+    fig, ax = plt.subplots(1, 6, gridspec_kw={'width_ratios':[1, 0.08, 1, 0.08, 1, 0.08]}, figsize=(26, 8))
     plt.title(name)
-    g1 =sns.heatmap(true_delta_matrix, cbar=False, ax=ax[0])
-    ax[0].set_title("True Noise Matrix")
-    ax[1].set_title("Estimated Label Noise Matrix")
-    g2 = sns.heatmap(label_noise_matrix, cbar_ax=ax[2], ax=ax[1])
-    plt.savefig('heatmaps/{}.png'.format(name))
+    g1 =sns.heatmap(torch.abs(label_noise_matrix - true_delta_matrix), cmap="YlGnBu", cbar=True, ax = ax[0], cbar_ax= ax[1], vmin=0, vmax=0.5)
+    g2 =sns.heatmap(true_delta_matrix, cmap="YlGnBu", cbar=True, ax=ax[2], cbar_ax=ax[3], vmin=0, vmax=1)
+    g3 =sns.heatmap(label_noise_matrix, cmap="YlGnBu", cbar=True, ax= ax[4], cbar_ax=ax[5], vmin=0, vmax=1)
+
+    ax[0].set_title("Estimation Error")
+    ax[2].set_title("True Label Noise")
+    ax[4].set_title("Estimated Label Noise")
+    for axis in ax:
+        tly = axis.get_yticklabels()
+        axis.set_yticklabels(tly, rotation=0)
+    plt.savefig('heatmaps/aug_{}.png'.format(name))
 
 def run_inference_on_augmentations(model, data, augmentations, num_classes, device, writer):
     aggregated = torch.zeros(num_classes).float()
     num_total_augs = 0 
     softmax = torch.nn.Softmax(dim=1)
+
     for aug in augmentations:
         if  type(data[aug]) == list:
             for i in range(len(data[aug])):
                example = data[aug][i].float().to(device)
-               writer.add_image("five_crop", data[aug][i][0], i) 
                output = softmax(model(example)).detach().reshape(num_classes).cpu()
                aggregated += output 
             num_total_augs += len(data[aug]) 
@@ -131,7 +161,6 @@ def run_inference_on_augmentations(model, data, augmentations, num_classes, devi
             output = softmax(model(example)).detach().reshape(num_classes).cpu()
             aggregated += output
             num_total_augs += 1
-            writer.add_image("hflip", data[aug][0], 0) 
    
     aggregated += softmax(model(data["image"].float().to(device))).detach().reshape(num_classes).cpu()
     writer.add_image("original", data["image"][0], 0) 

@@ -5,12 +5,18 @@ import torchvision.transforms as transforms
 from noisy_dataset import NoisyDataset
 
 def get_dataset(dataset, delta_matrix, augmentations, input_shape,  batch_size):
-    if "hflip" and "five_crop" in augmentations:
-        c, h, w = input_shape[0], input_shape[1], input_shape[2]
-        size = int(0.875 * h)
-        transform = transforms.Compose([transforms.RandomHorizontalFlip(), 
-                                            transforms.RandomApply([transforms.RandomCrop(size), transforms.Resize((h, w))]),
-                                            transforms.ToTensor()]) 
+    c, h, w = input_shape[0], input_shape[1], input_shape[2]
+    size = int(0.875 * h)
+
+    transform = []
+    if "rot" in augmentations:
+        transform.append(transforms.RandomRotation(degrees=15))
+    if "five_crop" in augmentations:
+        transform.append(transforms.RandomApply([transforms.RandomCrop(size), transforms.Resize((h, w))]))
+    if "hflip" in augmentations:
+        transform.append(RandomHorizontalFlip())
+    transform.append(transforms.ToTensor())
+    transform = transforms.Compose(transform)
     if dataset =="CIFAR10":
         trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
