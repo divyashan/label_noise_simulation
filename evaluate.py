@@ -75,26 +75,28 @@ def main():
         val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size)
         writer_val = SummaryWriter(
         "runs/evaluate/validation/{}".format(",".join(augmentations)))
+        accuracy_per_model = []
         for i in range(len(models_names)):
             model, num_classes = load_model(models_paths[i], device, config)
             acc, label_noise_matrix = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, model, device, num_classes, val_loader, writer_val)
             generate_heatmap(torch.tensor(true_delta_matrices[i]), label_noise_matrix, models_names[i])
-            accuracy_given_auglist.append(acc)
+            accuracy_per_model.append(acc)
+        accuracy_given_auglist.append(accuracy_per_model)
+    plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist, models_names)
 
-    plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist)
+def plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist, models_names):
 
-def plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist):
+    for j in range(len(models_names)):
+        objects = [", ".join(i) for i in list_of_augmentations]
+        y_pos = np.arange(len(objects))
+        performance = [accuracy_per_model[j] for accuracy_per_model in accuracy_given_auglist]
 
-    objects = [", ".join(i) for i in list_of_augmentations]
-    y_pos = np.arange(len(objects))
-    performance = accuracy_given_auglist
-
-    plt.bar(y_pos, performance, align='center', alpha=0.5)
-    plt.xticks(y_pos, objects)
-    plt.ylabel('Accuracy')
-    plt.title('Augmentation')
-
-    plt.savefig('plots/aug_accuracy.pdf')
+        plt.bar(y_pos, performance, align='center', alpha=0.5)
+        plt.xticks(y_pos, objects)
+        plt.ylabel('Accuracy')
+        plt.xlabel('Augmentation')
+        plt.title(models_names[j])
+        plt.savefig('plots/aug_accuracy/{}.pdf'.format(j))
 
 def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, num_classes, val_loader, writer):
         mse = torch.nn.MSELoss(reduction = "sum")
