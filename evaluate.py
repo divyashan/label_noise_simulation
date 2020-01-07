@@ -6,7 +6,7 @@ from modules import get_model
 import math
 import torchvision
 import torchvision.transforms as transforms
-from data_loaders import TTADataset
+from data_loaders import TTADataset, TTA_HDF5_Dataset
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
@@ -15,7 +15,7 @@ import numpy as np
 DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/cifar_test.yaml"
 
 
-def get_tta_dataset(dataset, augmentations, batch_size):
+def get_tta_dataset(dataset, augmentations, batch_size, model, device, config):
     transform = transforms.Compose([transforms.ToTensor()]) 
 
     if dataset =="CIFAR10":
@@ -25,7 +25,8 @@ def get_tta_dataset(dataset, augmentations, batch_size):
         testset = torchvision.datasets.MNIST(root='./data', train=False,
                                        download=True, transform=transform)
     testset = TTADataset(testset, augmentations)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+    tta_hdf5_dataset = TTA_HDF5_Dataset(model, testset, device, config) 
+    testloader = torch.utils.data.DataLoader(tta_hdf5_dataset, batch_size=batch_size,
                                          shuffle=False, num_workers=1)
 
     return testloader
@@ -73,7 +74,7 @@ def main():
     accuracy_given_auglist=[] 
     kl_given_auglist = []
     for augmentations in list_of_augmentations:
-        val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size)
+
         writer_val = SummaryWriter(
         "runs/evaluate/validation/{}".format(",".join(augmentations)))
         accuracy_per_model = []
@@ -81,7 +82,8 @@ def main():
         kl_label_noise_per_model = {"mean": [], "std": []}
         for i in range(len(models_names)):
             model, num_classes = load_model(models_paths[i], device, config)
-            acc, label_noise_matrix, mean_kl, std_dev_kl  = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, model, device, num_classes, val_loader, writer_val)
+            val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size, model, device, config)
+            acc, label_noise_matrix, mean_kl, std_dev_kl  = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, device, num_classes, val_loader, writer_val)
             generate_heatmap(torch.tensor(true_delta_matrices[i]), label_noise_matrix, models_names[i])
             accuracy_per_model.append(acc)
             kl_label_noise_per_model["mean"].append(mean_kl)
@@ -135,9 +137,8 @@ def plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_
         plt.savefig('plots/aug_accuracy/{}.pdf'.format(models_names[j]))
         plt.close('all')
 
-def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, num_classes, val_loader, writer):
+def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_classes, val_loader, writer):
         mse = torch.nn.MSELoss(reduction = "sum")
-        model.eval()
         eval_fraction = 1
         val_load_iter = iter(val_loader)
         counts = torch.zeros(num_classes)
@@ -148,7 +149,7 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, 
         for i in range(size):
             data = val_load_iter.next()
             target_var = data["label"].float().to(device)
-            output, pred_class = run_inference_on_augmentations(model, data, augmentations, num_classes, device, writer)
+            output, pred_class = run_inference_on_augmentations(data, augmentations)
             if pred_class.item() == target_var.item():
                 accuracy += 1
                 # compute output
@@ -184,31 +185,31 @@ def generate_heatmap(true_delta_matrix, label_noise_matrix, name):
         axis.set_yticklabels(tly, rotation=0)
     plt.savefig('heatmaps/aug_{}.png'.format(name))
 
-def run_inference_on_augmentations(model, data, augmentations, num_classes, device, writer):
+def run_inference_on_augmentations(data, augmentations):
+    num_classes = data["image_output"].shape[2]
     aggregated = torch.zeros(num_classes).float()
     num_total_augs = 0 
     softmax = torch.nn.Softmax(dim=1)
 
     for aug in augmentations:
-        if  type(data[aug]) == list:
-            for i in range(len(data[aug])):
-               example = data[aug][i].float().to(device)
-               output = model(example).detach().reshape(num_classes).cpu()
-
-               aggregated += output 
-            num_total_augs += len(data[aug]) 
+        if not aug.startswith("rot_"):
+            aggregated += torch.sum(data["{}_output".format(aug)], 1).unsqueeze(dim=0).reshape(num_classes)
+            num_total_augs += data["{}_output".format(aug)].shape[0] 
         else:
-            example = data[aug].float().to(device)
-            output = model(example).detach().reshape(num_classes).cpu()
-            aggregated += output
-            num_total_augs += 1
-   
-    aggregated += model(data["image"].float().to(device)).detach().reshape(num_classes).cpu()
+            rot_aug = get_key_that_starts_with_rot(data)
+            n_rotations = int(aug.split("_")[1])
+            aggregated += torch.sum(data[rot_aug][:n_rotations, :], 1).unsqueeze(dim=0).reshape(num_classes)
+            num_total_augs += n_rotations 
+
+    aggregated += data["image_output"].unsqueeze(dim=0).reshape(num_classes)
     aggregated = aggregated/(num_total_augs+1)
     final_output = softmax(aggregated.unsqueeze(dim=0)).detach().reshape(num_classes).cpu()
     return final_output, torch.argmax(final_output)
 
-
+def get_key_that_starts_with_rot(data):
+    for key in data.keys():
+        if key.startswith("rot_"):
+            return key
 
 if __name__ == '__main__':
     main()

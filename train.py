@@ -74,7 +74,8 @@ def main():
 
     for epoch in range(start_epoch, num_epochs):
         trainer.train_epoch(epoch)
-        save_checkpoint(
+        if epoch %2 ==0:
+            save_checkpoint(
             {'epoch': epoch + 1, 'state_dict': model.state_dict()},
             filename=os.path.join(config["train"]["save_dir"],
                                   'checkpoint_{}.tar'.format(
