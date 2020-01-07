@@ -1,5 +1,6 @@
 #!/bin/bash
 
-python train.py --config configs/mv_gaussian.yaml
-python train.py --config configs/mv_gaussian2.yaml
-python train.py --config configs/mv_gaussian3.yaml
+python train.py --config configs/cifar_swap2.yaml
+python train.py --config configs/cifar_swap3.yaml
+python train.py --config configs/cifar_swap5.yaml
+python train.py --config configs/cifar_clean

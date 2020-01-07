@@ -6,7 +6,7 @@ from modules import get_model
 import math
 import torchvision
 import torchvision.transforms as transforms
-from tta_dataset import TTADataset
+from data_loaders import TTADataset
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
@@ -71,21 +71,53 @@ def main():
     list_of_augmentations = config["data_loader"]["augmentations"]
     print("TTA AUGMENTATIONS: {}".format(list_of_augmentations))
     accuracy_given_auglist=[] 
+    kl_given_auglist = []
     for augmentations in list_of_augmentations:
         val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size)
         writer_val = SummaryWriter(
         "runs/evaluate/validation/{}".format(",".join(augmentations)))
         accuracy_per_model = []
+        print(augmentations)
+        kl_label_noise_per_model = {"mean": [], "std": []}
         for i in range(len(models_names)):
             model, num_classes = load_model(models_paths[i], device, config)
-            acc, label_noise_matrix = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, model, device, num_classes, val_loader, writer_val)
+            acc, label_noise_matrix, mean_kl, std_dev_kl  = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, model, device, num_classes, val_loader, writer_val)
             generate_heatmap(torch.tensor(true_delta_matrices[i]), label_noise_matrix, models_names[i])
             accuracy_per_model.append(acc)
+            kl_label_noise_per_model["mean"].append(mean_kl)
+            kl_label_noise_per_model["std"].append(std_dev_kl)
         accuracy_given_auglist.append(accuracy_per_model)
+        kl_given_auglist.append(kl_label_noise_per_model)
     plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist, models_names)
+    plot_kl_with_diff_augmentations(list_of_augmentations, kl_given_auglist, models_names)
+
+def plot_kl_with_diff_augmentations(list_of_augmentations, kl_dic, models_names):
+    print(list_of_augmentations)
+    print(kl_dic)
+    print(models_names)
+    for j in range(len(models_names)):
+        objects = [", ".join(i) for i in list_of_augmentations]
+        y_pos = np.arange(len(objects))
+        performance_mean = [kl_per_model["mean"][j] for kl_per_model in kl_dic]
+        performance_std = [kl_per_model["std"][j] for kl_per_model in kl_dic]
+
+        plt.bar(y_pos, performance_mean, yerr=performance_std, align='center', alpha=0.5)
+        plt.xticks(y_pos, objects)
+        plt.ylabel('KL Divergence')
+        plt.xlabel('Augmentation')
+        plt.title(models_names[j])
+        print(models_names[j])
+        xlocs, xlabs = plt.xticks()
+        for i, v in enumerate(performance_mean):
+            plt.text(xlocs[i] - 0.25, v + 0.01, str(v))
+        plt.savefig('plots/aug_kl/{}.pdf'.format(models_names[j]))
+        plt.close('all')
+
 
 def plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist, models_names):
-
+    print(list_of_augmentations)
+    print(accuracy_given_auglist)
+    print(models_names)
     for j in range(len(models_names)):
         objects = [", ".join(i) for i in list_of_augmentations]
         y_pos = np.arange(len(objects))
@@ -96,7 +128,12 @@ def plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_
         plt.ylabel('Accuracy')
         plt.xlabel('Augmentation')
         plt.title(models_names[j])
-        plt.savefig('plots/aug_accuracy/{}.pdf'.format(j))
+        print(models_names[j])
+        xlocs, xlabs = plt.xticks()
+        for i, v in enumerate(performance):
+            plt.text(xlocs[i] - 0.25, v + 0.01, str(v))
+        plt.savefig('plots/aug_accuracy/{}.pdf'.format(models_names[j]))
+        plt.close('all')
 
 def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, num_classes, val_loader, writer):
         mse = torch.nn.MSELoss(reduction = "sum")
@@ -125,11 +162,12 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, model, device, 
         mse_error = mse(label_noise_matrix, true_delta_matrix)
         kl_error = torch.zeros(len(label_noise_matrix))
         for i in range(len(label_noise_matrix)):
-            kl_error[i] += torch.nn.functional.kl_div(label_noise_matrix[i],true_delta_matrix[i], 0)
+            kl_error[i] += torch.abs(torch.nn.functional.kl_div(label_noise_matrix[i],true_delta_matrix[i], reduction='sum'))
         mean_kl = kl_error.mean()
         std_dev_kl = kl_error.std()
         print("Model: {}, MSE Error: {}, KL Error: {} +- {}, Acc: {}".format(name_model, mse_error, mean_kl, std_dev_kl, accuracy/size))
-        return true_delta_matrix, label_noise_matrix
+        acc = accuracy/size
+        return acc, label_noise_matrix, mean_kl, std_dev_kl
 
 def generate_heatmap(true_delta_matrix, label_noise_matrix, name):
     fig, ax = plt.subplots(1, 6, gridspec_kw={'width_ratios':[1, 0.08, 1, 0.08, 1, 0.08]}, figsize=(26, 8))
@@ -155,19 +193,19 @@ def run_inference_on_augmentations(model, data, augmentations, num_classes, devi
         if  type(data[aug]) == list:
             for i in range(len(data[aug])):
                example = data[aug][i].float().to(device)
-               output = softmax(model(example)).detach().reshape(num_classes).cpu()
+               output = model(example).detach().reshape(num_classes).cpu()
+
                aggregated += output 
             num_total_augs += len(data[aug]) 
         else:
             example = data[aug].float().to(device)
-            output = softmax(model(example)).detach().reshape(num_classes).cpu()
+            output = model(example).detach().reshape(num_classes).cpu()
             aggregated += output
             num_total_augs += 1
    
-    aggregated += softmax(model(data["image"].float().to(device))).detach().reshape(num_classes).cpu()
-    writer.add_image("original", data["image"][0], 0) 
-
-    final_output = aggregated/(num_total_augs + 1)
+    aggregated += model(data["image"].float().to(device)).detach().reshape(num_classes).cpu()
+    aggregated = aggregated/(num_total_augs+1)
+    final_output = softmax(aggregated.unsqueeze(dim=0)).detach().reshape(num_classes).cpu()
     return final_output, torch.argmax(final_output)
 
 
