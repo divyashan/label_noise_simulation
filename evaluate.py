@@ -12,10 +12,11 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 import seaborn as sns
 import numpy as np
+import metrics
 DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/cifar_test.yaml"
 
 
-def get_tta_dataset(dataset, augmentations, batch_size, model, device, config):
+def get_tta_dataset(dataset, augmentations, batch_size, model, device, hdf5, num_classes):
     transform = transforms.Compose([transforms.ToTensor()]) 
 
     if dataset =="CIFAR10":
@@ -25,7 +26,7 @@ def get_tta_dataset(dataset, augmentations, batch_size, model, device, config):
         testset = torchvision.datasets.MNIST(root='./data', train=False,
                                        download=True, transform=transform)
     testset = TTADataset(testset, augmentations)
-    tta_hdf5_dataset = TTA_HDF5_Dataset(model, testset, device, config) 
+    tta_hdf5_dataset = TTA_HDF5_Dataset(model, testset, device, hdf5, num_classes) 
     testloader = torch.utils.data.DataLoader(tta_hdf5_dataset, batch_size=batch_size,
                                          shuffle=False, num_workers=1)
 
@@ -64,6 +65,8 @@ def main():
     models_paths = config["test"]["models_paths"]
     true_delta_matrices = config["test"]["true_delta_matrices"]
     num_classes = config["test"]["num_classes"]
+    hdf5s = config["data_loader"]["hdf5"]
+
     for matrix in true_delta_matrices:
         assert(len(matrix) == num_classes)
         for row in range(len(matrix)):
@@ -82,9 +85,8 @@ def main():
         kl_label_noise_per_model = {"mean": [], "std": []}
         for i in range(len(models_names)):
             model, num_classes = load_model(models_paths[i], device, config)
-            val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size, model, device, config)
+            val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size, model, device, hdf5s[i], num_classes)
             acc, label_noise_matrix, mean_kl, std_dev_kl  = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, device, num_classes, val_loader, writer_val)
-            generate_heatmap(torch.tensor(true_delta_matrices[i]), label_noise_matrix, models_names[i])
             accuracy_per_model.append(acc)
             kl_label_noise_per_model["mean"].append(mean_kl)
             kl_label_noise_per_model["std"].append(std_dev_kl)
@@ -146,10 +148,15 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_cla
         size = int(len(val_loader) * eval_fraction)
         accuracy = 0
         print("only use correct examples for label noise matrix")
+
+        aggregated_outputs = []
+        correct_labels = []
         for i in range(size):
             data = val_load_iter.next()
             target_var = data["label"].float().to(device)
             output, pred_class = run_inference_on_augmentations(data, augmentations)
+            aggregated_outputs.append(output.detach())
+            correct_labels.append(target_var.item())
             if pred_class.item() == target_var.item():
                 accuracy += 1
                 # compute output
@@ -159,14 +166,14 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_cla
         for j in range(num_classes):
             label_noise_matrix[j] /= counts[j]
 
-        
+        expected_calibration_error, max_calibration_error = metrics.calibration_error(aggregated_outputs, correct_labels)
         mse_error = mse(label_noise_matrix, true_delta_matrix)
         kl_error = torch.zeros(len(label_noise_matrix))
         for i in range(len(label_noise_matrix)):
             kl_error[i] += torch.abs(torch.nn.functional.kl_div(label_noise_matrix[i],true_delta_matrix[i], reduction='sum'))
         mean_kl = kl_error.mean()
         std_dev_kl = kl_error.std()
-        print("Model: {}, MSE Error: {}, KL Error: {} +- {}, Acc: {}".format(name_model, mse_error, mean_kl, std_dev_kl, accuracy/size))
+        print("Model: {}, MSE Error: {}, KL Error: {} +- {}, ECE: {}, MCE, Acc: {}".format(name_model, mse_error, mean_kl, std_dev_kl, expected_calibration_error, max_calibration_error, accuracy/size))
         acc = accuracy/size
         return acc, label_noise_matrix, mean_kl, std_dev_kl
 

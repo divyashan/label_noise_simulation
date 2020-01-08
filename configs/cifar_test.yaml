@@ -6,7 +6,7 @@ data_loader:
 test:
   model: "resnet18"
   num_classes: 10
-  device: "cuda:0"
+  device: "cuda:2"
   models_names: ["cifar_clean", "cifar_swap2", "cifar_swap3"]
   models_paths: ["models/rot/cifar_clean/checkpoint_16.tar", "models/rot/cifar_swap2/checkpoint_18.tar", "models/rot/cifar_swap3/checkpoint_24.tar"]
   true_delta_matrices: [
