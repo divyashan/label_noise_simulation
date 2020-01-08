@@ -1,13 +1,11 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 import h5py
-import yaml
 import os
 
 
-def make_hdf5_file(model, tta_dataset, device, config):
-    file_dataset = config["data_loader"]["hdf5"]
-    n_classes  = config["test"]["num_classes"]
+def make_hdf5_file(model, tta_dataset, device, hdf5, n_classes):
+    file_dataset = hdf5
     f = h5py.File("datasets/{}".format(file_dataset), "w")
 
     augs = list(tta_dataset[0].keys())
@@ -43,15 +41,10 @@ def make_hdf5_file(model, tta_dataset, device, config):
 
 class TTA_HDF5_Dataset(Dataset):
 
-    def __init__(self, model, tta_dataset, device, config_file):
-        if type(config_file) == dict:
-            config = config_file
-        else: 
-            with open(config_file) as fp:
-                config = yaml.load(fp)
-        file_dataset = config["data_loader"]["hdf5"]
+    def __init__(self, model, tta_dataset, device, hdf5, num_classes):
+        file_dataset = hdf5
         if not os.path.isfile("datasets/{}".format(file_dataset)):
-            make_hdf5_file(model, tta_dataset, device, config)
+            make_hdf5_file(model, tta_dataset, device, hdf5, num_classes)
         f = h5py.File("datasets/{}".format(file_dataset))
 
         self.data = {}
