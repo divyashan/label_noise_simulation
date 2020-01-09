@@ -36,6 +36,8 @@ def calibration_errors(aggregated_outputs, correct_labels):
 
 def bin_confidence(single_bin, bin_number):
     size = len(single_bin)
+    if size == 0:
+        return 0
     prob_prediction_sum = 0
     for sample in single_bin:
         aggregated_output, _ = sample
@@ -44,6 +46,8 @@ def bin_confidence(single_bin, bin_number):
 
 def bin_accuracy(single_bin):
     size = len(single_bin)
+    if size == 0:
+        return 0
     correct_samples = 0
     for sample in single_bin:
         aggregated_output, correct_label = sample
