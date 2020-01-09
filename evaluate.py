@@ -13,6 +13,8 @@ plt.switch_backend('agg')
 import seaborn as sns
 import numpy as np
 import metrics
+import pandas as pd
+
 DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/cifar_test.yaml"
 
 
@@ -76,70 +78,21 @@ def main():
     print("TTA AUGMENTATIONS: {}".format(list_of_augmentations))
     accuracy_given_auglist=[] 
     kl_given_auglist = []
+
+    data = []
     for augmentations in list_of_augmentations:
-
-        writer_val = SummaryWriter(
-        "runs/evaluate/validation/{}".format(",".join(augmentations)))
-        accuracy_per_model = []
-        print(augmentations)
-        kl_label_noise_per_model = {"mean": [], "std": []}
         for i in range(len(models_names)):
-            model, num_classes = load_model(models_paths[i], device, config)
-            val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size, model, device, hdf5s[i], num_classes)
-            acc, label_noise_matrix, mean_kl, std_dev_kl  = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, device, num_classes, val_loader, writer_val)
-            accuracy_per_model.append(acc)
-            kl_label_noise_per_model["mean"].append(mean_kl)
-            kl_label_noise_per_model["std"].append(std_dev_kl)
-        accuracy_given_auglist.append(accuracy_per_model)
-        kl_given_auglist.append(kl_label_noise_per_model)
-    plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist, models_names)
-    plot_kl_with_diff_augmentations(list_of_augmentations, kl_given_auglist, models_names)
+            val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size, None, device, hdf5s[i], num_classes)
+            stats = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, device, num_classes, val_loader)
+            data.append(stats)
 
-def plot_kl_with_diff_augmentations(list_of_augmentations, kl_dic, models_names):
-    print(list_of_augmentations)
-    print(kl_dic)
-    print(models_names)
-    for j in range(len(models_names)):
-        objects = [", ".join(i) for i in list_of_augmentations]
-        y_pos = np.arange(len(objects))
-        performance_mean = [kl_per_model["mean"][j] for kl_per_model in kl_dic]
-        performance_std = [kl_per_model["std"][j] for kl_per_model in kl_dic]
-
-        plt.bar(y_pos, performance_mean, yerr=performance_std, align='center', alpha=0.5)
-        plt.xticks(y_pos, objects)
-        plt.ylabel('KL Divergence')
-        plt.xlabel('Augmentation')
-        plt.title(models_names[j])
-        print(models_names[j])
-        xlocs, xlabs = plt.xticks()
-        for i, v in enumerate(performance_mean):
-            plt.text(xlocs[i] - 0.25, v + 0.01, str(v))
-        plt.savefig('plots/aug_kl/{}.pdf'.format(models_names[j]))
-        plt.close('all')
+    df = pd.DataFrame(data)
+    df.to_csv("results.csv", index=False)
+#    plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist, models_names)
+#    plot_kl_with_diff_augmentations(list_of_augmentations, kl_given_auglist, models_names)
 
 
-def plot_accuracy_with_diff_augmentations(list_of_augmentations, accuracy_given_auglist, models_names):
-    print(list_of_augmentations)
-    print(accuracy_given_auglist)
-    print(models_names)
-    for j in range(len(models_names)):
-        objects = [", ".join(i) for i in list_of_augmentations]
-        y_pos = np.arange(len(objects))
-        performance = [accuracy_per_model[j] for accuracy_per_model in accuracy_given_auglist]
-
-        plt.bar(y_pos, performance, align='center', alpha=0.5)
-        plt.xticks(y_pos, objects)
-        plt.ylabel('Accuracy')
-        plt.xlabel('Augmentation')
-        plt.title(models_names[j])
-        print(models_names[j])
-        xlocs, xlabs = plt.xticks()
-        for i, v in enumerate(performance):
-            plt.text(xlocs[i] - 0.25, v + 0.01, str(v))
-        plt.savefig('plots/aug_accuracy/{}.pdf'.format(models_names[j]))
-        plt.close('all')
-
-def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_classes, val_loader, writer):
+def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_classes, val_loader):
         mse = torch.nn.MSELoss(reduction = "sum")
         eval_fraction = 1
         val_load_iter = iter(val_loader)
@@ -166,31 +119,25 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_cla
         for j in range(num_classes):
             label_noise_matrix[j] /= counts[j]
 
-        expected_calibration_error, max_calibration_error = metrics.calibration_error(aggregated_outputs, correct_labels)
+        expected_calibration_error, max_calibration_error = metrics.calibration_errors(aggregated_outputs, correct_labels)
         mse_error = mse(label_noise_matrix, true_delta_matrix)
         kl_error = torch.zeros(len(label_noise_matrix))
         for i in range(len(label_noise_matrix)):
             kl_error[i] += torch.abs(torch.nn.functional.kl_div(label_noise_matrix[i],true_delta_matrix[i], reduction='sum'))
         mean_kl = kl_error.mean()
         std_dev_kl = kl_error.std()
-        print("Model: {}, MSE Error: {}, KL Error: {} +- {}, ECE: {}, MCE, Acc: {}".format(name_model, mse_error, mean_kl, std_dev_kl, expected_calibration_error, max_calibration_error, accuracy/size))
+        print("Model: {}, MSE Error: {}, KL Error: {} +- {}, ECE: {}, MCE: {}, Acc: {}".format(name_model, mse_error, mean_kl, std_dev_kl, expected_calibration_error, max_calibration_error, accuracy/size))
         acc = accuracy/size
-        return acc, label_noise_matrix, mean_kl, std_dev_kl
-
-def generate_heatmap(true_delta_matrix, label_noise_matrix, name):
-    fig, ax = plt.subplots(1, 6, gridspec_kw={'width_ratios':[1, 0.08, 1, 0.08, 1, 0.08]}, figsize=(26, 8))
-    plt.title(name)
-    g1 =sns.heatmap(torch.abs(label_noise_matrix - true_delta_matrix), cmap="YlGnBu", cbar=True, ax = ax[0], cbar_ax= ax[1], vmin=0, vmax=0.5)
-    g2 =sns.heatmap(true_delta_matrix, cmap="YlGnBu", cbar=True, ax=ax[2], cbar_ax=ax[3], vmin=0, vmax=1)
-    g3 =sns.heatmap(label_noise_matrix, cmap="YlGnBu", cbar=True, ax= ax[4], cbar_ax=ax[5], vmin=0, vmax=1)
-
-    ax[0].set_title("Estimation Error")
-    ax[2].set_title("True Label Noise")
-    ax[4].set_title("Estimated Label Noise")
-    for axis in ax:
-        tly = axis.get_yticklabels()
-        axis.set_yticklabels(tly, rotation=0)
-    plt.savefig('heatmaps/aug_{}.png'.format(name))
+        stats = {"Accuracy": acc,
+#                 "Label Noise Matrix": label_noise_matrix,
+                 "KL Mean": mean_kl.item(),
+                 "KL Std": std_dev_kl.item(),
+                 "MSE": mse_error.item(),
+                 "ECE": expected_calibration_error.item(),
+                 "MCE": max_calibration_error.item(),
+                 "Augmentations": augmentations,
+                 "Model Name": name_model}
+        return stats
 
 def run_inference_on_augmentations(data, augmentations):
     num_classes = data["image_output"].shape[2]

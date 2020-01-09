@@ -1,16 +1,26 @@
 import numpy as np
 import bisect
+import torch
+
+def get_min_max(aggregated_outputs):
+    max_val = 0
+    min_val = float("inf")
+    for i in range(len(aggregated_outputs)):
+        max_val = max(max(aggregated_outputs[i]), max_val)
+        min_val = min(max(aggregated_outputs[i]), min_val)
+    return min_val, max_val
 
 def calibration_errors(aggregated_outputs, correct_labels):
     M = 10
     n = len(correct_labels)
-    bin_boundaries = np.linspace(0, 1, M+1, endpoint=True)
+    min_val, max_val = get_min_max(aggregated_outputs)
+    bin_boundaries = np.linspace(min_val, max_val, M+1, endpoint=True)
 
-    bins = [[] in range(len(bin_boundaries)-1)]
+    bins = [[] for i in range(M)]
     #Assign each output to a bin
     for i in range(len(aggregated_outputs)):
         prob_prediction = max(aggregated_outputs[i])
-        j = bisect.bisect_left(bin_boundaries, prob_prediction)
+        j = bisect.bisect_left(bin_boundaries, prob_prediction)-1
         bins[j].append((aggregated_outputs[i], correct_labels[i]))
 
     expected_calibration_error = 0

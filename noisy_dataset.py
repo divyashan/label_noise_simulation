@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 from simulation import gen_corrupted_labels
 import random
+import torch
 
 def add_noise_to_labels(trainset, delta_matrix):
    tilde_labels = gen_corrupted_labels(delta_matrix, trainset.targets) 
@@ -21,6 +22,12 @@ class NoisyDataset(Dataset):
         self.original_dataset = original_dataset
         self.delta_matrix = delta_matrix
         self.corrupted_labels = add_noise_to_labels(original_dataset, delta_matrix)
+        corrupted_label_counts = {i: list(self.corrupted_labels).count(i) for i in set(self.corrupted_labels)}
+        class_weights = [0 for i in range(len(corrupted_label_counts.keys()))]
+        max_class_size = max(corrupted_label_counts.values())
+        for i in range(len(class_weights)):
+            class_weights[i] += corrupted_label_counts[i]/max_class_size
+        self.class_weights = torch.tensor(class_weights)
     
     def __len__(self):
         return len(self.corrupted_labels)

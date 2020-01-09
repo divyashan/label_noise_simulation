@@ -54,7 +54,7 @@ def main():
         start_epoch = 0
     batch_size = 32
     augmentations = config["data_loader"]["augmentations"]
-    train_loader, val_loader  = get_dataset(config["data_loader"]["name"], config["data_loader"]["delta_matrix"], augmentations, input_shape, batch_size)
+    train_loader, val_loader, class_weights  = get_dataset(config["data_loader"]["name"], config["data_loader"]["delta_matrix"], augmentations, input_shape, batch_size)
 
     if not os.path.exists(config["train"]["save_dir"]):
         os.makedirs(config["train"]["save_dir"])
@@ -68,8 +68,9 @@ def main():
         "runs/{}/validation".format(config["train"]["save_as"]))
 
     # Train the network
+    class_weights = class_weights.to(device)
     num_epochs = config["train"]["num_epochs"]
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     trainer = Trainer(device, model, writer_train, writer_val, train_loader, val_loader, criterion, optimizer)
 
     for epoch in range(start_epoch, num_epochs):

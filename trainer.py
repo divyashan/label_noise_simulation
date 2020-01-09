@@ -40,7 +40,7 @@ def get_dataset(dataset, delta_matrix, augmentations, input_shape,  batch_size):
         testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                          shuffle=False, num_workers=1)
  
-    return trainloader, testloader
+    return trainloader, testloader, tilde_trainset.class_weights
 
 
 class Trainer(object):
