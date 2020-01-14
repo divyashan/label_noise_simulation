@@ -27,7 +27,7 @@ def plot_statistic_versus_aug_given_model(df, statistic, model_name):
     for i, v in enumerate(performance):
         plt.text(xlocs[i]-0.25, v + 0.01, str(round(v, 2)), fontsize=15)
     #plt.savefig('plots/{}_versus_aug/{}.pdf'.format(statistic, model_name))                                                                   
-    plt.setp(xlabs, rotation=90, horizontalalignment='right')
+    plt.setp(xlabs, rotation=30, horizontalalignment='right')
     plt.show()
     plt.close('all')
 

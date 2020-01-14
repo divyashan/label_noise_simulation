@@ -82,7 +82,8 @@ def main():
     data = []
     for augmentations in list_of_augmentations:
         for i in range(len(models_names)):
-            val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size, None, device, hdf5s[i], num_classes)
+            model, _ = load_model(models_paths[i], device, config)
+            val_loader = get_tta_dataset(config["data_loader"]["name"], augmentations, batch_size, model, device, hdf5s[i], num_classes)
             stats = run_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, device, num_classes, val_loader)
             data.append(stats)
 
@@ -119,7 +120,11 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_cla
         for j in range(num_classes):
             label_noise_matrix[j] /= counts[j]
 
-        expected_calibration_error, max_calibration_error = metrics.calibration_errors(aggregated_outputs, correct_labels)
+        calibration_error_stats = metrics.calibration_errors(aggregated_outputs, correct_labels)
+        expected_calibration_error = calibration_error_stats["ECE"]
+        max_calibration_error = calibration_error_stats["MCE"]
+        metrics.reliability_plot(calibration_error_stats)
+
         mse_error = mse(label_noise_matrix, true_delta_matrix)
         kl_error = torch.zeros(len(label_noise_matrix))
         for i in range(len(label_noise_matrix)):
@@ -155,8 +160,8 @@ def run_inference_on_augmentations(data, augmentations):
             aggregated += torch.sum(data[rot_aug][:n_rotations, :], 1).unsqueeze(dim=0).reshape(num_classes)
             num_total_augs += n_rotations 
 
-    aggregated += data["image_output"].unsqueeze(dim=0).reshape(num_classes)
-    aggregated = aggregated/(num_total_augs+1)
+#    aggregated += data["image_output"].unsqueeze(dim=0).reshape(num_classes)
+    aggregated = aggregated/(num_total_augs)
     final_output = softmax(aggregated.unsqueeze(dim=0)).detach().reshape(num_classes).cpu()
     return final_output, torch.argmax(final_output)
 
