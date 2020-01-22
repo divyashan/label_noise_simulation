@@ -9,6 +9,8 @@ from logistic_regression import LogisticRegression
 from trainer import Trainer, get_dataset
 from tensorboardX import SummaryWriter
 from modules import get_model
+
+torch.manual_seed(0)
 DEFAULT_CONFIG = os.path.dirname(__file__) + "configs/mnist_clean.yaml"
 
 
@@ -52,37 +54,38 @@ def main():
 
     else:
         start_epoch = 0
-    batch_size = 32
-    augmentations = config["data_loader"]["augmentations"]
-    train_loader, val_loader, class_weights  = get_dataset(config["data_loader"]["name"], config["data_loader"]["delta_matrix"], augmentations, input_shape, batch_size)
+    batch_size = 128
 
-    if not os.path.exists(config["train"]["save_dir"]):
-        os.makedirs(config["train"]["save_dir"])
+    if config["train"]["method"] == "TTA":
+        augmentations = config["data_loader"]["augmentations"]
+        train_loader, val_loader, class_weights  = get_dataset(config["data_loader"]["name"], config["data_loader"]["delta_matrix"], augmentations,  batch_size)
 
-    learning_rate = config["train"]["learning_rate"] or 0.0001
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    writer_train = SummaryWriter(
-        "runs/{}/training".format(config["train"]["save_as"]))
-    writer_val = SummaryWriter(
-        "runs/{}/validation".format(config["train"]["save_as"]))
+        if not os.path.exists(config["train"]["save_dir"]):
+             os.makedirs(config["train"]["save_dir"])
 
-    # Train the network
-    class_weights = class_weights.to(device)
-    num_epochs = config["train"]["num_epochs"]
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
-    trainer = Trainer(device, model, writer_train, writer_val, train_loader, val_loader, criterion, optimizer)
+        learning_rate = config["train"]["learning_rate"] or 0.0001
+        optimizer = optim.SGD(model.parameters(), learning_rate, momentum=0.9, weight_decay=5e-4) 
+        writer_train = SummaryWriter(
+            "runs/{}/training".format(config["train"]["save_as"]))
+        writer_val = SummaryWriter(
+            "runs/{}/validation".format(config["train"]["save_as"]))
 
-    for epoch in range(start_epoch, num_epochs):
-        trainer.train_epoch(epoch)
-        if epoch %2 ==0:
-            save_checkpoint(
-            {'epoch': epoch + 1, 'state_dict': model.state_dict()},
-            filename=os.path.join(config["train"]["save_dir"],
+        # Train the network
+        class_weights = class_weights.to(device)
+        num_epochs = config["train"]["num_epochs"]
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        trainer = Trainer(device, model, writer_train, writer_val, train_loader, val_loader, criterion, optimizer)
+
+        for epoch in range(start_epoch, num_epochs):
+            trainer.train_epoch(epoch)
+            if epoch %2 ==0:
+                save_checkpoint(
+                {'epoch': epoch + 1, 'state_dict': model.state_dict()},
+                 filename=os.path.join(config["train"]["save_dir"],
                                   'checkpoint_{}.tar'.format(
                                       epoch))
-        )
-
+            )
     print('Finished training')
 
 

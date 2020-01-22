@@ -57,9 +57,8 @@ def bin_accuracy(single_bin):
     return correct_samples/size
 
 def reliability_plot(stats, name):
-    bin_boundaries = stats["bin_boundaries"][1:-1]
+    bin_boundaries = stats["bin_boundaries"][:-1]
     accuracy = stats["accuracy"]
-
     plt.bar(bin_boundaries, accuracy, align="edge")
     xlocs, xlabs = plt.xticks()
 

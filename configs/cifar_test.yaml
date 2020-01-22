@@ -1,25 +1,26 @@
 data_loader:
   name: "CIFAR10"
-  augmentations: [[], ["rot_1"], ["rot_2"], ["rot_3"], ["rot_4"], ["rot_5"], ["rot_6"], ["rot_7"], ["rot_8"]]
+  augmentations: [["five_crop", "hflip"]]
   input_shape: [3, 32, 32]
-  hdf5: ["cifar_clean_rot_32.hdf5", "cifar_swap2_rot_32.hdf5", "cifar_swap3_rot_32.hdf5"]
+  hdf5: ["cifar_swap2.hdf5", "cifar_swap3.hdf5", "cifar_swap5.hdf5"]
 test:
+  method: "TTA"
   model: "resnet18"
   num_classes: 10
   device: "cuda:2"
-  models_names: ["cifar_clean", "cifar_swap2", "cifar_swap3"]
-  models_paths: ["models/rot/cifar_clean/checkpoint_16.tar", "models/rot/cifar_swap2/checkpoint_18.tar", "models/rot/cifar_swap3/checkpoint_24.tar"]
+  models_names: ["cifar_swap2", "cifar_swap3", "cifar_swap5"]
+  models_paths: ["models/cifar_swap2/checkpoint_248.tar", "models/cifar_swap3/checkpoint_110.tar" , "models/cifar_swap5/checkpoint_98.tar"]
   true_delta_matrices: [
-[[1, 0, 0., 0., 0., 0., 0., 0., 0., 0.],
-                 [0., 1, 0, 0., 0., 0., 0., 0., 0., 0.],
-                 [0, 0., 1, 0., 0., 0., 0., 0., 0., 0.],
-                 [0., 0., 0., 1, 0., 0, 0., 0., 0., 0.],
-                 [0., 0., 0, 0., 1,  0., 0., 0., 0., 0.],
-                 [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
-                 [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
-                 [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.],
-                 [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.],
-                 [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.]],
+          #[[1, 0, 0., 0., 0., 0., 0., 0., 0., 0.],
+          #                 [0., 1, 0, 0., 0., 0., 0., 0., 0., 0.],
+          #       [0, 0., 1, 0., 0., 0., 0., 0., 0., 0.],
+          #       [0., 0., 0., 1, 0., 0, 0., 0., 0., 0.],
+          #       [0., 0., 0, 0., 1,  0., 0., 0., 0., 0.],
+          #       [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
+          #       [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
+          #       [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.],
+          #       [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.],
+          #       [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.]],
 [[1, 0, 0., 0., 0., 0., 0., 0., 0., 0.],
                  [0., 0.6, 0.4, 0,  0., 0., 0., 0., 0., 0.],
                  [0, 0.4, 0.6, 0., 0., 0., 0., 0., 0., 0.],

@@ -1,6 +1,6 @@
 import torch.nn as nn
 from torchvision import models
-
+from modules.resnet import ResNet18 
 
 def get_model(name, pretrained, num_channels, num_classes):
     """
@@ -23,7 +23,7 @@ def get_model(name, pretrained, num_channels, num_classes):
                                           [2, 2, 2, 2],
                                           num_classes)
         else:
-                model.fc = nn.Linear(512, num_classes)
+            model = ResNet18()
     else:
         model = nn.Sequential(*(list(model.children())[:-1]))
         model.classifier.add_module('6', nn.Linear(

@@ -1,6 +1,6 @@
 data_loader:
   name: "CIFAR10"
-  augmentations: ["rot"]
+  augmentations: ["hflip", "five_crop", "rot"]
   input_shape: [3, 32, 32]
   delta_matrix: [[1, 0, 0., 0., 0., 0., 0., 0., 0., 0.],
                  [0., 1, 0, 0., 0., 0., 0., 0., 0., 0.],
@@ -13,11 +13,12 @@ data_loader:
                  [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.],
                  [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.]]
 train:
+  method: "TTA"
   device: "cuda:0"
-  num_epochs: 70
+  num_epochs: 250
   model: "resnet18"
-  learning_rate: 0.005
-  save_dir: "models/rot/cifar_clean"
-  save_as: "rot/cifar_clean"
+  learning_rate: 0.1
+  save_dir: "models/cifar_clean_rot"
+  save_as: "cifar_clean_rot"
   num_classes: 10
-  resume: False 
+  resume: False
