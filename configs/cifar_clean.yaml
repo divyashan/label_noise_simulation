@@ -17,8 +17,8 @@ train:
   device: "cuda:0"
   num_epochs: 250
   model: "resnet18"
-  learning_rate: 0.1
+  learning_rate: 0.01
   save_dir: "models/cifar_clean_rot"
   save_as: "cifar_clean_rot"
   num_classes: 10
-  resume: False
+  resume: "models/cifar_clean_rot/checkpoint_240.tar"

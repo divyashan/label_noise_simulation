@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
 def calibration_errors(aggregated_outputs, correct_labels):
+    if len(correct_labels) == 0:
+        return {"ECE": torch.tensor([-1]) , "MCE": torch.tensor([-1]), "accuracy": [], "confidence": [], "bin_boundaries": []}
     M = 10
     n = len(correct_labels)
     bin_boundaries = np.linspace(0, 1, M+1, endpoint=True)
@@ -27,7 +29,7 @@ def calibration_errors(aggregated_outputs, correct_labels):
         confidence = bin_confidence(bins[bin_number], bin_number)
         accuracy = bin_accuracy(bins[bin_number])
         bin_size = len(bins[bin_number])
-        expected_calibration_error += bin_size/n * abs(accuracy - confidence)
+        expected_calibration_error += (bin_size/n) * abs(accuracy - confidence)
         max_calibration_error = max(max_calibration_error, abs(accuracy - confidence))
         stats["accuracy"].append(accuracy)
         stats["confidence"].append(confidence)

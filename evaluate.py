@@ -91,13 +91,13 @@ def main():
         for i in range(len(models_names)):
             model, _ = load_model(models_paths[i], device, config)
             test_loader  = get_tta_dataset(config["data_loader"]["name"], [], batch_size, model, device, hdf5s[i], num_classes)
-            stats = run_rank_pruning_evaluation(model, models_names[i], torch.tensor(true_delta_matrices[i]), device, num_classes, test_loader)
+            stats = run_rank_pruning_evaluation(models_names[i], torch.tensor(true_delta_matrices[i]), augmentations, device, num_classes, test_loader)
             data.append(stats)
     df = pd.DataFrame(data)
-    df.to_csv("results.csv", index=False)
+    df.to_csv(config["test"]["csv"], index=False)
 
 
-def run_rank_pruning_evaluation(model, name_model, true_delta_matrix, device, num_classes, val_loader):
+def run_rank_pruning_evaluation(name_model, true_delta_matrix, augmentations, device, num_classes, val_loader):
         mse = torch.nn.MSELoss(reduction = "sum")
         eval_fraction = 1
         val_load_iter = iter(val_loader)
@@ -114,14 +114,16 @@ def run_rank_pruning_evaluation(model, name_model, true_delta_matrix, device, nu
         for i in range(size):
             data = val_load_iter.next()
             target_var = data["label"].float().to(device)
-            output, pred_class = run_inference_on_augmentations(data, [])
-            aggregated_outputs.append(output.detach())
-            correct_labels.append(target_var.item())
+            outputs_over_augmentations = get_outputs_over_all_augmentations(data, augmentations, num_classes)
 
-            if target_var.item() == pred_class.item():
-                thresholds[int(target_var.item())] += output[int(target_var.item())]
-                counts[int(target_var.item())] += 1.
-                accuracy += 1.
+            for output in outputs_over_augmentations:
+                aggregated_outputs.append(output.detach())
+                correct_labels.append(target_var.item())
+
+                if target_var.item() == pred_class.item():
+                    thresholds[int(target_var.item())] += output[int(target_var.item())]
+                    counts[int(target_var.item())] += 1.
+                    accuracy += 1.
 
         for i in range(num_classes):
             thresholds[i] /= counts[i]
@@ -132,22 +134,22 @@ def run_rank_pruning_evaluation(model, name_model, true_delta_matrix, device, nu
         name = name_model + "{}".format([])
         metrics.reliability_plot(calibration_error_stats, name)
 
-
         val_load_iter = iter(val_loader)
         for i in range(size):
             count = 0
             data = val_load_iter.next()
             target_var = data["label"].float().to(device)
-            output, pred_class = run_inference_on_augmentations(data, [])
+            outputs_over_augmentations = get_outputs_over_all_augmentations(data, augmentations, num_classes)
 
-            for j in range(num_classes):
-                if output[j]  >= thresholds[j]:
-                    count += 1
-                    pred_y = j
-                if count > 1:
-                    pred_y = int(pred_class.item())
-                if count > 0:
-                    label_noise_matrix[int(target_var.item())][pred_y] += 1.
+            for output in outputs_over_augmentations:
+                for j in range(num_classes):
+                    if output[j]  >= thresholds[j]:
+                        count += 1
+                        pred_y = j
+                    if count > 1:
+                        pred_y = int(pred_class.item())
+                    if count > 0:
+                        label_noise_matrix[int(target_var.item())][pred_y] += 1.
 
           # measure accuracy and record loss
         for j in range(num_classes):
@@ -172,8 +174,7 @@ def run_rank_pruning_evaluation(model, name_model, true_delta_matrix, device, nu
             "Model Name": name_model}
         print(stats)
 
-
-def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_classes, val_loader):
+def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_classes, val_loader, policy='patrini_max'):
         print("AUGMENTATIONS: {}".format(augmentations))
         mse = torch.nn.MSELoss(reduction = "sum")
         eval_fraction = 1
@@ -182,24 +183,55 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_cla
         label_noise_matrix = torch.zeros(num_classes, num_classes)
         size = int(len(val_loader) * eval_fraction)
         accuracy = 0
-        print("only use correct examples for label noise matrix")
 
         aggregated_outputs = []
         correct_labels = []
         maxes_per_class = torch.zeros(num_classes)
+        output_per_pred_class  = [[] for i in range(num_classes)]
 
         for i in range(size):
             data = val_load_iter.next()
             target_var = data["label"].float().to(device)
-            output, pred_class = run_inference_on_augmentations(data, augmentations)
-            aggregated_outputs.append(output.detach())
-            correct_labels.append(target_var.item())
 
-            if output[pred_class.item()] >= label_noise_matrix[pred_class.item()][pred_class.item()]:
-                label_noise_matrix[pred_class.item()] = output
+            if policy == "patrini_avg":
+                output, pred_class = run_inference_on_augmentations_policy_sum(data, augmentations)
+                aggregated_outputs.append(output.detach())
+                correct_labels.append(target_var.item())
 
-            if pred_class.item() == target_var.item():
-                accuracy += 1
+                if pred_class.item() == target_var.item():
+                    accuracy += 1
+
+                if output[pred_class.item()] >= label_noise_matrix[pred_class.item()][pred_class.item()]:
+                    label_noise_matrix[pred_class.item()] = output
+            elif policy == "patrini_max":
+                outputs_over_augmentations = get_outputs_over_all_augmentations(data, augmentations, num_classes)
+
+
+                for output in outputs_over_augmentations:
+                    pred_class = int(torch.argmax(output).item())
+                    correct_labels.append(target_var.item())
+                    output_per_pred_class[pred_class].append(output.detach().numpy())
+
+                    aggregated_outputs.append(output.detach())
+                    correct_labels.append(target_var.item())
+                    if pred_class == target_var.item():
+                        accuracy += (1/len(outputs_over_augmentations))
+
+        if policy == "patrini_max":
+            percentile_per_pred_class = [np.percentile(np.array(output_per_pred_class[i][:][i]), 99) for i in range(len(output_per_pred_class))]
+
+        
+            for c in range(len(output_per_pred_class)):
+                min_dist = float("inf")
+                best_output = None
+                for output in output_per_pred_class[c]:
+                    dist = abs(output[c] - percentile_per_pred_class[c])
+                    if dist < min_dist:
+                        min_dist = dist
+                        best_output = output
+                label_noise_matrix[c] = torch.tensor(best_output)
+
+                
                 # compute output
 #            label_noise_matrix[int(pred_class.item())] += output 
 #            counts[int(pred_class.item())] += 1.
@@ -211,7 +243,7 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_cla
         expected_calibration_error = calibration_error_stats["ECE"]
         max_calibration_error = calibration_error_stats["MCE"]
         name = name_model + "{}".format(augmentations)
-        metrics.reliability_plot(calibration_error_stats, name)
+#        metrics.reliability_plot(calibration_error_stats, name)
 
         mse_error = mse(label_noise_matrix, true_delta_matrix)
         kl_error = torch.zeros(len(label_noise_matrix))
@@ -232,8 +264,32 @@ def run_evaluation(name_model, true_delta_matrix, augmentations, device, num_cla
                  "Model Name": name_model}
         return stats
 
-def run_inference_on_augmentations(data, augmentations):
-    print(data)
+def get_outputs_over_all_augmentations(data, augmentations, num_classes):
+    all_outputs = []
+    softmax = torch.nn.Softmax(dim=0)
+
+    for aug in augmentations:
+        
+        if not aug.startswith("rot_"):
+            if aug == "five_crop":
+                for i in range(5):
+                    aug_output = softmax(data["{}_output".format(aug)][0][i].squeeze().squeeze())
+                    all_outputs.append(aug_output)
+            else:
+                aug_output = softmax(data["{}_output".format(aug)].squeeze().squeeze())
+                all_outputs.append(aug_output) 
+        else:
+            rot_aug = get_key_that_starts_with_rot(data)
+            n_rotations = int(aug.split("_")[1])
+            for i in range(n_rotations):
+                aug_output = softmax(data[rot_aug][0][i].squeeze().squeeze())
+                all_outputs.append(aug_output)
+    img_output = softmax(data["image_output"].squeeze().squeeze())
+    all_outputs.append(img_output)
+    return all_outputs
+
+
+def run_inference_on_augmentations_policy_sum(data, augmentations):
     num_classes = data["image_output"].shape[2]
     aggregated = torch.zeros(num_classes).float()
     num_total_augs = 0 

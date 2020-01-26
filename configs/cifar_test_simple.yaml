@@ -1,15 +1,15 @@
 data_loader:
   name: "CIFAR10"
-  augmentations: [[], ["hflip"], ["hflip", "five_crop"], ["five_crop"],["rot_5"], ["hflip", "five_crop", "rot_5"]] 
+  augmentations: [["hflip", "five_crop", "rot_32"]] 
   input_shape: [3, 32, 32]
-  hdf5: ["clean_all_aug.hdf5"]
+  hdf5: ["clean.hdf5"]
 test:
   method: "TTA"
   model: "resnet18"
   num_classes: 10
   device: "cuda:1"
   models_names: ["cifar_clean"]
-  models_paths: ["models/cifar_clean_aug/checkpoint_160.tar"]
+  models_paths: ["models/cifar_clean_rot/checkpoint_248.tar"]
   true_delta_matrices: [
 [[1, 0, 0., 0., 0., 0., 0., 0., 0., 0.],
                  [0., 1, 0, 0., 0., 0., 0., 0., 0., 0.],
