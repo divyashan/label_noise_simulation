@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torchvision import models
 from modules.resnet import ResNet18 
+from modules.resnet_em import ResNet18_EM
 
 def get_model(name, pretrained, num_channels, num_classes):
     """
@@ -14,17 +15,20 @@ def get_model(name, pretrained, num_channels, num_classes):
         num_channels- int number of channels
         num_classes- number of outputs of the network
     """
-    function = getattr(models, name)
-    model = function(pretrained=pretrained)
-
-    if "resnet" in name:
+    if "resnet18"==name:
         if num_channels == 1:
             model = ResNet18Grayscale(models.resnet.BasicBlock,
                                           [2, 2, 2, 2],
                                           num_classes)
         else:
             model = ResNet18()
+    elif "resnet18_em" == name:
+        model = ResNet18_EM()
     else:
+        function = getattr(models, name)
+        model = function(pretrained=pretrained)
+
+
         model = nn.Sequential(*(list(model.children())[:-1]))
         model.classifier.add_module('6', nn.Linear(
             list(model.classifier.children()))[-3].in_features, num_classes)

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
 def calibration_errors(aggregated_outputs, correct_labels):
+    assert(len(aggregated_outputs) == len(correct_labels))
     if len(correct_labels) == 0:
         return {"ECE": torch.tensor([-1]) , "MCE": torch.tensor([-1]), "accuracy": [], "confidence": [], "bin_boundaries": []}
     M = 10
