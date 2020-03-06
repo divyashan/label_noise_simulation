@@ -1,0 +1,11 @@
+data_loader:
+  name: "CIFAR10"
+  augmentations: [[]]
+  input_shape: [3, 32, 32]
+test:
+  method: "TTA"
+  model: "resnet18"
+  num_classes: 10
+  device: "cuda:2"
+  models_names: ["5crop_hflip"]
+  models_paths: ["models/cifar_5crop_hflip/checkpoint_24.tar"]
